@@ -30,6 +30,10 @@ h1 em{font-style:normal;color:var(--molten)}
 .sub{color:var(--muted);font-size:13.5px;margin:6px 0 0}
 .spec{font-family:var(--f-mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 14px}
 .spec b{color:var(--fg);font-weight:600}
+.maker{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;border:1px solid var(--line);border-left:4px solid var(--molten);background:var(--panel);padding:12px 16px}
+.maker .k{font-size:12px;letter-spacing:.12em}
+.maker strong{font-family:var(--f-display);font-weight:400;font-size:clamp(22px,4vw,32px);line-height:1.15;color:var(--fg)}
+.maker strong span{color:var(--molten)}
 .bench{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
 @media(max-width:880px){.bench{grid-template-columns:minmax(0,1fr)}}
 .stage{position:relative;border:1px solid var(--line);background:#0c0f11;min-width:0}
@@ -119,6 +123,11 @@ ul.reasons{margin:0;padding-left:18px;font-size:13.5px;color:var(--bad)}
     </div>
     <div class="spec"><span>합격 각장 <b>2–6 mm</b></span><span>본 용접구간 <b>150 mm 전부</b></span><span>지급 봉 <b>3개</b></span></div>
   </header>
+
+  <div class="maker" aria-label="제작자">
+    <span class="k">제작자</span>
+    <strong>한국폴리텍대학 자동화과 <span>장성욱</span></strong>
+  </div>
 
   <div class="bench">
     <div class="stage">
