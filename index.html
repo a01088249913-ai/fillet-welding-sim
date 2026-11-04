@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="설비보전기사 3과제 수평 필릿 용접 연습 시뮬레이터">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>필릿 용접 연습기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: 작업대 — 왼쪽 시뮬레이터(정면 뷰), 오른쪽 세팅 레일, 아래 검사 스트립(각장 그래프 + 단면). 용접 차광면 느낌의 단일 다크 테마(의도적 선택). */
+:root{
+  color-scheme: dark;
+  --bg:#13171a; --panel:#1a2024; --panel2:#20272c; --line:#2c363c;
+  --fg:#e6e9ea; --muted:#94a1a8; --molten:#ff8b2b; --arc:#bfe2ff;
+  --ok:#5ccb8b; --warn:#f0c04a; --bad:#f0645a; --scrim:rgba(12,15,17,.82);
+  --f-display:"Black Han Sans","IBM Plex Sans KR",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.55;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:22px 56px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:22px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 24px;border-bottom:1px solid var(--line);padding-bottom:14px}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(28px,5vw,40px);line-height:1.05;margin:0;letter-spacing:.01em;text-wrap:balance}
+h1 em{font-style:normal;color:var(--molten)}
+.sub{color:var(--muted);font-size:13.5px;margin:6px 0 0}
+.spec{font-family:var(--f-mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 14px}
+.spec b{color:var(--fg);font-weight:600}
+.bench{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+@media(max-width:880px){.bench{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;border:1px solid var(--line);background:#0c0f11;min-width:0}
+#sim{display:block;width:100%;height:460px;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none}
+@media(max-width:560px){#sim{height:410px}}
+.msg{position:absolute;left:10px;right:10px;top:10px;pointer-events:none;font-size:13px;line-height:1.45;background:var(--scrim);border-left:3px solid var(--molten);padding:7px 10px;color:var(--fg)}
+.msg[data-tone="bad"]{border-left-color:var(--bad)}
+.msg[data-tone="ok"]{border-left-color:var(--ok)}
+.hud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--line)}
+.g{padding:10px 12px;border-right:1px solid var(--line);min-width:0}
+.g:last-child{border-right:0}
+.k{font-size:11px;letter-spacing:.06em;color:var(--muted)}
+.v{font-family:var(--f-mono);font-size:20px;font-variant-numeric:tabular-nums;line-height:1.25;white-space:nowrap}
+.v small{font-size:12px;color:var(--muted)}
+.bar{height:6px;background:var(--line);position:relative;margin-top:6px}
+.bar .zone{position:absolute;top:0;bottom:0;background:rgba(92,203,139,.35)}
+.bar .needle{position:absolute;top:-3px;width:3px;height:12px;background:var(--fg);transform:translateX(-1px);transition:left .08s linear}
+.bar .tgt{position:absolute;top:-2px;width:1px;height:10px;background:var(--ok)}
+@media(max-width:560px){.hud{grid-template-columns:repeat(2,minmax(0,1fr))}.g:nth-child(2){border-right:0}.g:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+.rail{border:1px solid var(--line);background:var(--panel);display:grid;gap:0}
+.rail section{padding:14px 14px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+.rail section:last-child{border-bottom:0}
+.rail h2,.panel h2{font-size:12px;letter-spacing:.08em;color:var(--muted);margin:0;font-weight:500}
+label.f{display:grid;gap:4px;font-size:13.5px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.row output{font-family:var(--f-mono);font-size:14px;color:var(--molten);font-variant-numeric:tabular-nums}
+.hint{font-size:12px;color:var(--muted);line-height:1.45}
+select,button{font:inherit;color:var(--fg)}
+select{background:var(--panel2);border:1px solid var(--line);padding:8px 10px;width:100%}
+input[type=range]{width:100%;accent-color:var(--molten)}
+.chk{display:flex;align-items:center;gap:8px;font-size:13.5px}
+.chk input{accent-color:var(--molten);width:16px;height:16px}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{background:var(--panel2);border:1px solid var(--line);padding:9px 10px;cursor:pointer;font-size:13.5px}
+button:hover:not(:disabled){border-color:var(--muted)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--arc);outline-offset:2px}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--molten);border-color:var(--molten);color:#1a0f05;font-weight:700}
+.seg{display:flex;border:1px solid var(--line)}
+.seg button{flex:1;border:0;border-right:1px solid var(--line);background:transparent}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--panel2);color:var(--molten);font-weight:700}
+.inspect{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px}
+@media(max-width:780px){.inspect{grid-template-columns:minmax(0,1fr)}}
+.panel{border:1px solid var(--line);background:var(--panel);padding:14px;min-width:0;display:grid;gap:10px;align-content:start}
+.panel canvas{display:block;width:100%;height:230px;cursor:pointer}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px}
+.report{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px}
+@media(max-width:780px){.report{grid-template-columns:minmax(0,1fr)}}
+.verdict{display:grid;gap:8px;align-content:start}
+.score{font-family:var(--f-display);font-size:64px;line-height:1;font-variant-numeric:tabular-nums}
+.score small{font-family:var(--f-body);font-size:15px;color:var(--muted)}
+.pill{display:inline-block;font-size:12.5px;font-weight:700;padding:3px 9px;border:1px solid currentColor;width:max-content}
+.pill.ok{color:var(--ok)} .pill.bad{color:var(--bad)} .pill.warn{color:var(--warn)}
+ul.reasons{margin:0;padding-left:18px;font-size:13.5px;color:var(--bad)}
+.metrics{display:grid;gap:9px}
+.m{display:grid;grid-template-columns:7.5em minmax(0,1fr) 4.2em;gap:10px;align-items:center;font-size:13.5px}
+.m .track{height:8px;background:var(--line)}
+.m .fill{height:100%;background:var(--molten)}
+.m span:last-child{font-family:var(--f-mono);font-size:12.5px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.stats div{background:var(--panel);padding:8px 10px}
+.stats .v{font-size:16px}
+.tips{margin:0;padding-left:18px;display:grid;gap:6px;font-size:14px}
+.tips li::marker{color:var(--molten)}
+.hist{font-family:var(--f-mono);font-size:12.5px;display:grid;gap:3px;color:var(--muted)}
+.hist div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--line);padding-bottom:3px}
+.guide{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px}
+@media(max-width:780px){.guide{grid-template-columns:minmax(0,1fr)}}
+.guide ol{margin:0;padding-left:20px;display:grid;gap:7px;font-size:14px;max-width:65ch}
+.guide table{border-collapse:collapse;width:100%;font-size:13.5px}
+.guide td,.guide th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertical-align:top}
+.guide th{color:var(--muted);font-weight:500;font-size:12px}
+.guide td.n{font-family:var(--f-mono);color:var(--molten);white-space:nowrap}
+.foot{font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){.bar .needle{transition:none}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>필릿 용접 <em>연습기</em></h1>
+      <p class="sub">설비보전기사 3과제 · 수평 필릿(H) · E4313 Ø3.2 — 아크 길이, 운봉 속도, 봉 내리기를 몸에 익히는 연습장</p>
+    </div>
+    <div class="spec"><span>합격 각장 <b>2–6 mm</b></span><span>본 용접구간 <b>150 mm 전부</b></span><span>지급 봉 <b>3개</b></span></div>
+  </header>
+
+  <div class="bench">
+    <div class="stage">
+      <canvas id="sim" aria-label="용접 시뮬레이터 화면. 누른 채로 끌어서 용접합니다."></canvas>
+      <div class="msg" id="msg" hidden></div>
+      <div class="hud">
+        <div class="g"><div class="k">아크 길이</div><div class="v" id="hArc">–</div><div class="bar"><span class="zone" style="left:25%;width:25%"></span><span class="needle" id="nArc" style="left:0"></span></div></div>
+        <div class="g"><div class="k">운봉 속도</div><div class="v" id="hSpd">–</div><div class="bar"><span class="zone" id="zSpd"></span><span class="tgt" id="tSpd"></span><span class="needle" id="nSpd" style="left:0"></span></div></div>
+        <div class="g"><div class="k">지금 각장(예상)</div><div class="v" id="hLeg">–</div><div class="bar"><span class="zone" style="left:25%;width:50%"></span><span class="needle" id="nLeg" style="left:0"></span></div></div>
+        <div class="g"><div class="k">용접봉</div><div class="v" id="hRod">–</div><div class="bar"><span class="needle" id="nRod" style="left:100%;background:var(--molten)"></span></div></div>
+      </div>
+    </div>
+
+    <aside class="rail">
+      <section>
+        <h2>시편</h2>
+        <select id="mode" aria-label="연습 모드">
+          <option value="free">자유 연습 · 1줄 · 봉 무제한</option>
+          <option value="m125">도면 ①②⑤ · T이음 양면 2줄 · 봉 3개</option>
+          <option value="m346">도면 ③④⑥ · 한면 1줄 · 봉 3개</option>
+        </select>
+        <div class="seg" id="lineSeg" hidden>
+          <button id="ln0" aria-pressed="true">용접선 1 (앞)</button>
+          <button id="ln1" aria-pressed="false">용접선 2 (뒤)</button>
+        </div>
+      </section>
+      <section>
+        <h2>용접기 · 자세</h2>
+        <label class="f" for="amp"><span class="row"><span>용접 전류</span><output id="ampO">120 A</output></span>
+          <input type="range" id="amp" min="90" max="160" step="5" value="120"></label>
+        <label class="f" for="ang"><span class="row"><span>작업각 (수평판 기준)</span><output id="angO">45°</output></span>
+          <input type="range" id="ang" min="30" max="60" step="1" value="45"></label>
+        <p class="hint">수평 필릿은 쇳물이 아래로 처져서 45°에선 수직 쪽 각장이 짧아져요. 몇 도 세워 보세요.</p>
+        <label class="chk"><input type="checkbox" id="guide" checked> 목표 속도 가이드 표시</label>
+        <label class="chk"><input type="checkbox" id="sound"> 아크 소리 (짧은 아크 = 지글지글)</label>
+      </section>
+      <section>
+        <h2>작업</h2>
+        <div class="btns">
+          <button id="bRod">봉 교체</button>
+          <button id="bDemo">시범 보기</button>
+          <button id="bNew">새 시편</button>
+          <button id="bSubmit" class="primary">작품 제출</button>
+        </div>
+        <p class="hint">누른 채로 홀더를 움직여요. 봉이 타서 짧아지니까 손을 <b>천천히 내려 주면서</b> 오른쪽으로 운봉하세요.</p>
+      </section>
+    </aside>
+  </div>
+
+  <div class="inspect">
+    <div class="panel">
+      <div class="row"><h2>각장 분포 · <span id="chartTitle">용접선 1</span></h2><span class="hint">그래프를 눌러 단면 보기</span></div>
+      <canvas id="chart" aria-label="위치별 각장 그래프"></canvas>
+      <div class="legend"><span><i style="background:var(--molten)"></i>수평 각장</span><span><i style="background:var(--arc)"></i>수직 각장</span><span><i style="background:rgba(92,203,139,.5);height:8px"></i>합격 2–6mm</span><span><i style="background:var(--bad)"></i>언더컷</span><span><i style="background:var(--warn)"></i>오버랩</span><span><i style="background:#b48cff"></i>융합 불량</span></div>
+    </div>
+    <div class="panel">
+      <div class="row"><h2>단면</h2><span class="hint" id="secX">–</span></div>
+      <canvas id="section" aria-label="선택한 위치의 비드 단면"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><h2>판정 (연습용 자체 점수 · 공식 채점기준 아님)</h2><span class="hint" id="repState"></span></div>
+    <div class="report" id="report"></div>
+  </div>
+
+  <div class="panel guide">
+    <div>
+      <h2>연습 순서</h2>
+      <ol>
+        <li>전류 120A, 작업각 48° 정도로 놓고 <b>시범 보기</b>로 속도와 봉 내리는 리듬을 먼저 봅니다.</li>
+        <li>자유 연습에서 아크 길이 게이지가 초록 구간(2–4mm)에 머물게만 연습해요. 봉이 붙거나 끊기지 않으면 통과.</li>
+        <li>속도 가이드 삼각형을 따라가며 150mm를 한 번에 채웁니다. 각장 그래프가 평평해질 때까지 반복.</li>
+        <li>봉이 다 타면 크레이터 10mm 앞에서 아크를 켜고 크레이터 위로 되돌아와 이어 갑니다. 끊긴 자리에 빈 곳이 없어야 해요.</li>
+        <li>도면 모드(봉 3개)로 실제 시험처럼 끝까지 하고 제출합니다. 기록이 아래에 쌓여요.</li>
+      </ol>
+    </div>
+    <div>
+      <h2>E4313 Ø3.2 수평 필릿 기준값 (일반적인 작업 범위)</h2>
+      <table>
+        <tr><th>항목</th><th>값</th><th>틀리면</th></tr>
+        <tr><td>전류</td><td class="n">110–130 A</td><td>높으면 언더컷·스패터, 낮으면 봉 붙음·오버랩</td></tr>
+        <tr><td>아크 길이</td><td class="n">≈ 봉 지름 3mm</td><td>길면 언더컷·기공, 짧으면 붙음</td></tr>
+        <tr><td>작업각</td><td class="n">45–50°</td><td>눕히면 아래로 처짐, 세우면 수직판 언더컷</td></tr>
+        <tr><td>진행각</td><td class="n">후퇴각 10–20°</td><td>시뮬레이터는 15° 고정</td></tr>
+        <tr><td>운봉 속도</td><td class="n">2–3 mm/s</td><td>150mm를 대략 1분. 빠르면 가늘고 얕음</td></tr>
+      </table>
+      <p class="foot">시뮬레이터의 수치는 손 감각을 익히기 위한 단순화 모델이에요. 실제 장비·모재 상태에 따라 달라지니 실습장 조건을 우선하세요.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>최근 기록 (이 브라우저에만 저장)</h2>
+    <div class="hist" id="hist"></div>
+  </div>
+</div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---- model constants ----
+const N=300, CW=0.5, LEN=150;      // 0.5mm cells over 150mm
+const K=0.244;                      // deposit mm³ per (A·s)
+const VS=6;                         // px per mm vertical (schematic)
+const PHI=15*Math.PI/180, SIN=Math.sin(PHI), COS=Math.cos(PHI);
+const ROD0=38, STUB=6, ROD_LIFE=55; // schematic rod length, life (s) at 120A
+const BURN=(ROD0-STUB)/ROD_LIFE;
+const MODES={free:{label:'자유 연습',lines:1,rods:Infinity},m125:{label:'도면 ①②⑤',lines:2,rods:3},m346:{label:'도면 ③④⑥',lines:1,rods:3}};
+
+const S={mode:'free',I:120,ang:45,guide:true,sound:false,lines:[],cur:0,rodsUsed:1,rodLen:ROD0,
+  arc:false,holding:false,blockStrike:false,px:null,py:null,tipX:0,tipY:0,xmm:0,prevX:null,vEma:0,arcLen:99,
+  strikeT:0,stickT:0,now:0,ghostX0:0,ghostT0:0,sparks:[],selX:75,follow:true,submitted:false,demo:null,auto:null,quiet:false};
+
+function newLine(){return{area:new Float32Array(N),ws:new Float32Array(N),arcS:new Float32Array(N),angS:new Float32Array(N),iS:new Float32Array(N),vS:new Float32Array(N),
+  uMax:new Float32Array(N),hot:new Float32Array(N).fill(-99),tC:new Float32Array(N).fill(-99),cold:new Uint8Array(N),pore:new Uint8Array(N),craters:[],spatter:[]};}
+
+const vTarget=()=>K*S.I/(4.6*4.6/2*1.15);
+const vForLeg=L=>K*S.I/(L*L/2*1.15);
+
+function legs(ln,i){
+  const A=ln.area[i], w=ln.ws[i];
+  if(!(w>0)) return {A:0,lh:0,lv:0,arc:3,ang:S.ang,I:S.I,v:0,conv:.3};
+  const arc=ln.arcS[i]/w, ang=ln.angS[i]/w, I=ln.iS[i]/w, v=ln.vS[i]/w;
+  const Atri=A/1.15;
+  let r=1+(ang-45)*0.025;
+  const sag=0.06+0.12*clamp((I-115)/35,0,1)+0.05*clamp((A-12)/10,0,1);
+  r=Math.max(0.4,r*(1-sag));
+  const wf=clamp(1+0.04*(arc-3),0.9,1.15);
+  const lh=Math.sqrt(2*Atri/r)*wf, lv=r*Math.sqrt(2*Atri/r)*wf;
+  const conv=clamp(0.32-0.08*(arc-3)+0.1*clamp(2-v,0,2),0.05,0.6);
+  return {A,lh,lv,arc,ang,I,v,conv};
+}
+function flags(ln,i,L){
+  if(L.A<0.8) return {uc:false,ol:false,lf:false};
+  const ol=Math.max(0,(110-L.I)/18)+Math.max(0,(L.A-13)/5)+Math.max(0,(38-L.ang)/8)+Math.max(0,(1.5-L.v)/0.8);
+  const lf=Math.max(0,(106-L.I)/14)+Math.max(0,(L.arc-5)/1.5)+Math.max(0,(L.v-4.3)/1.5)+(ln.cold[i]?0.7:0);
+  return {uc:ln.uMax[i]>1,ol:ol>1,lf:lf>1};
+}
+
+// ---- canvas setup ----
+const sim=$('sim'), sctx=sim.getContext('2d');
+const chart=$('chart'), cctx=chart.getContext('2d');
+const sec=$('section'), xctx=sec.getContext('2d');
+let G={W:600,H:460,mL:28,mR:28,pxmm:3.6,jy:300,dpr:1}, bg=null;
+function fit(c,ctx){const r=c.getBoundingClientRect(),d=Math.min(2,window.devicePixelRatio||1);c.width=Math.max(1,Math.round(r.width*d));c.height=Math.max(1,Math.round(r.height*d));ctx.setTransform(d,0,0,d,0,0);return{w:r.width,h:r.height};}
+function resize(){
+  const s=fit(sim,sctx); const d=Math.min(2,window.devicePixelRatio||1);
+  G={W:s.w,H:s.h,mL:28,mR:28,pxmm:(s.w-56)/LEN,jy:Math.round(s.h*0.66),dpr:d};
+  buildBg(); fit(chart,cctx); fit(sec,xctx); drawChart(); drawSection();
+}
+function buildBg(){
+  const {W,H,mL,mR,jy,pxmm,dpr}=G;
+  bg=document.createElement('canvas'); bg.width=Math.round(W*dpr); bg.height=Math.round(H*dpr);
+  const b=bg.getContext('2d'); b.setTransform(dpr,0,0,dpr,0,0);
+  b.fillStyle='#0b0e10'; b.fillRect(0,0,W,H);
+  const x0=mL, x1=W-mR;
+  let gr=b.createLinearGradient(0,0,0,jy); gr.addColorStop(0,'#2b3439'); gr.addColorStop(1,'#4d5a61');
+  b.fillStyle=gr; b.fillRect(x0,0,x1-x0,jy);
+  gr=b.createLinearGradient(0,jy,0,H); gr.addColorStop(0,'#5a6870'); gr.addColorStop(1,'#323c42');
+  b.fillStyle=gr; b.beginPath(); b.moveTo(x0,jy); b.lineTo(x1,jy); b.lineTo(x1+14,H); b.lineTo(x0-14,H); b.closePath(); b.fill();
+  // mill-scale streaks
+  let seed=7; const rnd=()=>((seed=(seed*16807)%2147483647)/2147483647);
+  for(let k=0;k<160;k++){const y=rnd()*jy, x=x0+rnd()*(x1-x0), w=20+rnd()*120; b.fillStyle=`rgba(${rnd()<.5?'255,255,255':'0,0,0'},${0.025+rnd()*0.04})`; b.fillRect(x,y,Math.min(w,x1-x),1);}
+  for(let k=0;k<90;k++){const y=jy+4+rnd()*(H-jy-8), x=x0+rnd()*(x1-x0), w=20+rnd()*120; b.fillStyle=`rgba(${rnd()<.5?'255,255,255':'0,0,0'},${0.03+rnd()*0.04})`; b.fillRect(x,y,Math.min(w,x1-x),1);}
+  b.fillStyle='#0f1418'; b.fillRect(x0,jy-1,x1-x0,2);
+  // ruler
+  const ry=H-26;
+  b.strokeStyle='rgba(230,233,234,.45)'; b.fillStyle='rgba(230,233,234,.7)'; b.lineWidth=1;
+  b.font='10px "IBM Plex Mono",monospace'; b.textAlign='center';
+  for(let mm=0;mm<=150;mm+=10){const x=x0+mm*pxmm+.5; b.beginPath(); b.moveTo(x,ry); b.lineTo(x,ry+(mm%50?5:9)); b.stroke(); if(mm%50===0) b.fillText(mm+'',x,ry+20);}
+  b.beginPath(); b.moveTo(x0,ry+.5); b.lineTo(x1,ry+.5); b.stroke();
+  b.textAlign='left'; b.font='11px "IBM Plex Sans KR",sans-serif'; b.fillStyle='rgba(230,233,234,.5)';
+  b.fillText('수직판',x0+8,18); b.fillText('수평판',x0+8,jy+22);
+  b.textAlign='right'; b.fillText('본 용접구간 150 mm',x1-6,ry-6);
+}
+
+// ---- messages ----
+let msgTimer=0;
+function msg(t,tone='',sec=4.5){const m=$('msg'); if(!t){m.hidden=true;return;} m.textContent=t; m.dataset.tone=tone; m.hidden=false; msgTimer=sec;}
+
+// ---- sim ----
+function reset(){
+  S.lines=Array.from({length:MODES[S.mode].lines},newLine); S.cur=0; S.rodsUsed=1; S.rodLen=ROD0;
+  S.arc=false; S.holding=false; S.blockStrike=false; S.submitted=false; S.demo=null; S.auto=null; S.sparks=[];
+  S.selX=75; S.follow=true; S.prevX=null; S.vEma=0;
+  updateSeg(); report(); msg('');
+}
+function strike(){
+  S.arc=true; S.strikeT=S.now; S.stickT=0; S.vEma=0; S.ghostX0=S.xmm; S.ghostT0=S.now; S.prevX=S.xmm;
+  if(!S.quiet && S.demo!=='live') msg('');
+}
+function stop(reason){
+  const ln=S.lines[S.cur];
+  S.arc=false; S.stickT=0; S.prevX=S.xmm;
+  if(S.xmm>0.5&&S.xmm<149) ln.craters.push({x:S.xmm,t:S.now});
+  if(reason==='stick'){S.blockStrike=true; msg('용접봉이 모재에 붙었어요 (아크가 너무 짧음). 손을 떼고 다시 시작하세요.','bad');}
+  else if(reason==='long'){msg('아크가 끊어졌어요 (아크가 너무 김). 봉이 타는 만큼 손을 내려 주세요.','bad');}
+  else if(reason==='rod'){S.blockStrike=true;
+    if(S.demo==='live') {}
+    else if(S.rodsUsed<MODES[S.mode].rods) msg('용접봉을 다 썼어요. 다시 누르면 새 봉으로 바뀝니다. 크레이터 10mm 앞에서 아크를 켜고 되돌아와 이어 가세요.');
+    else msg('지급된 용접봉을 모두 썼어요. 작품을 제출하세요.','bad');}
+  if(!S.quiet) report();
+}
+function deposit(ln,x,vol,sig,dt,p){
+  const i0=Math.max(0,Math.floor((x-3*sig)/CW)), i1=Math.min(N-1,Math.ceil((x+3*sig)/CW));
+  const norm=1/(sig*Math.sqrt(2*Math.PI));
+  for(let i=i0;i<=i1;i++){
+    const d=(i+.5)*CW-x, w=Math.exp(-d*d/(2*sig*sig));
+    const before=ln.area[i];
+    ln.area[i]+=vol*w*norm;
+    const wt=w*dt; ln.ws[i]+=wt; ln.arcS[i]+=wt*p.arc; ln.angS[i]+=wt*p.ang; ln.iS[i]+=wt*p.I; ln.vS[i]+=wt*p.v;
+    if(w>0.6&&p.u>ln.uMax[i]) ln.uMax[i]=p.u;
+    if(Math.abs(d)<0.35) ln.tC[i]=S.now;
+    if(w>0.2) ln.hot[i]=S.now;
+    if(p.cold&&before<0.8&&w>0.5) ln.cold[i]=1;
+  }
+}
+function step(dt){
+  S.now+=dt;
+  if(S.demo==='live') autopilot(dt);
+  const ln=S.lines[S.cur];
+  if(S.px!=null){
+    const rodPx=S.rodLen*VS;
+    S.tipX=S.px-rodPx*SIN; S.tipY=S.py+rodPx*COS;
+    S.arcLen=(G.jy-S.tipY)/VS; S.xmm=(S.tipX-G.mL)/G.pxmm;
+  } else S.arcLen=99;
+  if(S.holding&&!S.arc&&!S.submitted&&!S.blockStrike&&S.rodLen>STUB+0.01){
+    if(S.arcLen<=2.5&&S.arcLen>-0.6) strike();
+    else if(S.arcLen<=-0.6){S.blockStrike=true; msg('봉 끝이 모재를 눌렀어요. 손을 떼고 살짝 위에서 다시 내려오세요.','bad');}
+  }
+  if(S.arc){
+    const dx=S.xmm-(S.prevX??S.xmm), vi=dx/dt;
+    S.vEma+=(vi-S.vEma)*Math.min(1,dt/0.35);
+    const I=S.I, arc=S.arcLen, ang=S.ang;
+    const stickTh=0.7+Math.max(0,(110-I)*0.03);
+    if(S.now-S.strikeT>0.35&&arc<stickTh) S.stickT+=dt; else S.stickT=0;
+    if(S.stickT>0.2) return stop('stick');
+    if(arc>(I<105?6:7)) return stop('long');
+    S.rodLen-=BURN*(I/120)*dt;
+    if(S.rodLen<=STUB){S.rodLen=STUB; return stop('rod');}
+    const v=Math.abs(S.vEma);
+    const u=Math.max(0,(I-128)/18)+Math.max(0,(arc-4.2)/1.4)+Math.max(0,(v-3.8)/1.5)+Math.max(0,(ang-55)/8);
+    const loss=1-0.06*Math.max(0,arc-3.5);
+    const sig=1.6+0.25*Math.max(0,arc-3);
+    deposit(ln,S.xmm,K*I*loss*dt,sig,dt,{arc,ang,I,v,u,cold:S.now-S.strikeT<0.6});
+    const sp=Math.max(0,arc-4.2)*25+Math.max(0,I-140)*0.8;
+    if(Math.random()<sp*dt&&ln.spatter.length<500) ln.spatter.push({x:S.xmm+(Math.random()-.5)*30,dy:(Math.random()-.35)*90,r:.8+Math.random()*1.4});
+    if(arc>4.8&&Math.random()<(arc-4.8)*1.2*dt){const i=Math.round(S.xmm/CW); if(i>=0&&i<N) ln.pore[i]=1;}
+    if(!S.quiet&&!reduce){const n=Math.random()<0.6?1:2+Math.floor(Math.max(0,arc-3.5)*2); for(let k=0;k<n;k++) S.sparks.push({x:S.tipX,y:G.jy-arc*VS*0.5,vx:(Math.random()-.5)*220,vy:-Math.random()*180-40,life:.35+Math.random()*.4});}
+  }
+  S.prevX=S.xmm;
+  if(!S.quiet){for(const p of S.sparks){p.vy+=600*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;} S.sparks=S.sparks.filter(p=>p.life>0&&p.y<G.H); if(S.sparks.length>200) S.sparks.splice(0,S.sparks.length-200);}
+}
+function autopilot(dt){
+  const A=S.auto;
+  if(!S.arc&&S.rodLen<=STUB+0.01){
+    if(S.rodsUsed<MODES[S.mode].rods){S.rodsUsed++; S.rodLen=ROD0; A.x=Math.max(0,A.x-8); A.dwell=0.3; S.blockStrike=false; if(!S.quiet) msg('시범: 새 봉으로 바꾸고 크레이터 앞쪽에서 아크를 켠 뒤 되돌아와 이어 갑니다.');}
+    else {finishDemo(); return;}
+  }
+  A.t+=dt;
+  let targetArc=1.8;
+  if(S.arc){
+    targetArc=3.0+0.22*Math.sin(A.t*1.7);
+    if(A.dwell>0) A.dwell-=dt;
+    else if(A.x<150) A.x=Math.min(150,A.x+vTarget()*(1+0.05*Math.sin(A.t*0.9))*dt);
+    else {A.end=(A.end||0)+dt; if(A.end>0.6){S.holding=false; stop('release'); finishDemo(); return;}}
+  }
+  const rodPx=S.rodLen*VS, tipX=G.mL+A.x*G.pxmm;
+  S.px=tipX+rodPx*SIN; S.py=G.jy-targetArc*VS-rodPx*COS; S.holding=true;
+}
+function finishDemo(){
+  S.holding=false; S.demo=S.quiet?'static':'done'; S.follow=false; S.selX=75;
+  report(); updateSeg();
+  if(!S.quiet) msg('시범 끝. 아래 각장 그래프와 단면을 보고, 캔버스를 누르면 새 시편으로 직접 시작합니다.','ok',8);
+}
+function startDemo(quiet){
+  reset(); S.demo='live'; S.auto={t:0,x:0,dwell:0.5}; S.blockStrike=false;
+  if(quiet){S.quiet=true; let n=0; while(S.demo==='live'&&n<9000){step(1/60);n++;} S.quiet=false; S.now+=10; S.demo='static'; S.px=null; report();
+    msg('예시: 이상적인 조건(120A·48°)으로 용접한 비드입니다. 캔버스를 누르면 새 시편으로 직접 시작해요.','ok',12);}
+  else msg('시범: 아크 3mm를 유지하며 봉이 타는 만큼 손을 내리고, 가이드 속도로 운봉합니다.','',6);
+}
+
+// ---- input ----
+function pos(e){const r=sim.getBoundingClientRect(); S.px=e.clientX-r.left; S.py=e.clientY-r.top;}
+sim.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  if(S.demo){reset();}
+  if(S.submitted){msg('제출한 작품은 다시 작업할 수 없어요. 새 시편을 누르세요.','bad');return;}
+  try{sim.setPointerCapture(e.pointerId);}catch(_){}
+  pos(e); S.holding=true; S.blockStrike=false; S.follow=true;
+  if(S.rodLen<=STUB+0.01){
+    if(S.rodsUsed<MODES[S.mode].rods){S.rodsUsed++; S.rodLen=ROD0; msg('새 용접봉으로 교체했어요. 홀더를 위로 올려 봉 끝을 맞추세요.');}
+    else {msg('지급된 용접봉 3개를 모두 썼어요. 작품을 제출하세요.','bad'); S.blockStrike=true;}
+  }
+});
+sim.addEventListener('pointermove',e=>{if(S.demo==='live')return; if(e.pointerType==='mouse'||S.holding) pos(e);});
+const up=()=>{if(S.demo==='live')return; S.holding=false; S.blockStrike=false; if(S.arc) stop('release');};
+sim.addEventListener('pointerup',up); sim.addEventListener('pointercancel',up);
+sim.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&!S.holding&&S.demo!=='live') S.px=null;});
+
+$('mode').addEventListener('change',e=>{S.mode=e.target.value; reset();});
+$('amp').addEventListener('input',e=>{S.I=+e.target.value; $('ampO').textContent=S.I+' A';});
+$('ang').addEventListener('input',e=>{S.ang=+e.target.value; $('angO').textContent=S.ang+'°';});
+$('guide').addEventListener('change',e=>S.guide=e.target.checked);
+$('bNew').addEventListener('click',()=>reset());
+$('bDemo').addEventListener('click',()=>startDemo(false));
+$('bRod').addEventListener('click',()=>{
+  if(S.arc||S.submitted) return;
+  if(S.rodsUsed>=MODES[S.mode].rods){msg('남은 용접봉이 없어요.','bad');return;}
+  if(S.rodLen>=ROD0-0.5){msg('아직 새 봉이에요.');return;}
+  S.rodsUsed++; S.rodLen=ROD0; msg('새 용접봉으로 교체했어요.');
+});
+$('bSubmit').addEventListener('click',()=>{
+  if(S.demo){msg('시범 비드는 제출할 수 없어요. 직접 용접해 보세요.');return;}
+  if(S.submitted) return;
+  const r=report(); if(!r.any){msg('아직 용접한 곳이 없어요.');return;}
+  if(S.arc) stop('release');
+  S.submitted=true; saveHist(r); report(); msg(r.pass?'제출 완료. 실격 사유 없음!':'제출 완료. 실격 사유를 확인하세요.',r.pass?'ok':'bad',8);
+});
+function updateSeg(){
+  const two=MODES[S.mode].lines===2; $('lineSeg').hidden=!two;
+  $('ln0').setAttribute('aria-pressed',S.cur===0); $('ln1').setAttribute('aria-pressed',S.cur===1);
+  $('chartTitle').textContent='용접선 '+(S.cur+1);
+}
+[0,1].forEach(k=>$('ln'+k).addEventListener('click',()=>{if(S.arc)return; S.cur=k; updateSeg(); report();}));
+chart.addEventListener('pointerdown',e=>{const r=chart.getBoundingClientRect(); const x=(e.clientX-r.left-34)/(r.width-34-10)*LEN; S.selX=clamp(x,0,LEN); S.follow=false; drawChart(); drawSection();});
+
+// ---- sound ----
+let actx=null,filt=null,gain=null;
+$('sound').addEventListener('change',e=>{
+  S.sound=e.target.checked;
+  try{
+    if(S.sound&&!actx){
+      actx=new (window.AudioContext||window.webkitAudioContext)();
+      const buf=actx.createBuffer(1,actx.sampleRate*2,actx.sampleRate), d=buf.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.35+(Math.random()<0.003?(Math.random()*2-1)*2.5:0);
+      const src=actx.createBufferSource(); src.buffer=buf; src.loop=true;
+      filt=actx.createBiquadFilter(); filt.type='bandpass'; filt.Q.value=0.6; filt.frequency.value=2500;
+      gain=actx.createGain(); gain.gain.value=0;
+      src.connect(filt); filt.connect(gain); gain.connect(actx.destination); src.start();
+    }
+    if(actx&&actx.state==='suspended') actx.resume();
+  }catch(_){S.sound=false;e.target.checked=false;}
+});
+function sound(){
+  if(!gain) return;
+  const on=S.sound&&S.arc;
+  const t=on?(0.10+0.06*clamp(S.arcLen-3,0,4))*(0.65+Math.random()*0.7):0;
+  gain.gain.setTargetAtTime(t,actx.currentTime,0.02);
+  filt.frequency.setTargetAtTime(1300+650*clamp(S.arcLen,0,7),actx.currentTime,0.05);
+}
+
+// ---- drawing: sim ----
+function drawSim(){
+  const c=sctx,{W,H,mL,pxmm,jy}=G, ln=S.lines[S.cur];
+  c.drawImage(bg,0,0,W,H);
+  const X=mm=>mL+mm*pxmm;
+  // spatter
+  c.fillStyle='#20272b';
+  for(const s of ln.spatter){c.beginPath(); c.arc(X(s.x),jy+s.dy,s.r,0,6.283); c.fill();}
+  // bead
+  const cw=CW*pxmm+0.7;
+  for(let i=0;i<N;i++){
+    if(ln.area[i]<0.25) continue;
+    const L=legs(ln,i), F=flags(ln,i,L);
+    const x=X(i*CW), upH=L.lv*VS*0.85, dn=L.lh*VS*0.5;
+    const rip=0.5+0.5*Math.sin(ln.tC[i]*2*Math.PI*5);
+    const base=104+Math.round(rip*30);
+    c.fillStyle=`rgb(${base-14},${base-2},${base+6})`; c.fillRect(x,jy-upH,cw,upH);
+    c.fillStyle=`rgb(${base+40},${base+50},${base+56})`; c.fillRect(x,jy-upH*0.62,cw,Math.max(1.5,upH*0.18));
+    c.fillStyle=`rgb(${base-40},${base-30},${base-24})`; c.fillRect(x,jy,cw,dn);
+    const age=S.now-ln.hot[i];
+    if(age<6){const T=Math.exp(-age/1.4); c.fillStyle=`rgba(255,${Math.round(120+120*T)},${Math.round(30+170*T*T)},${Math.min(1,T*1.1)})`; c.fillRect(x,jy-upH,cw,upH+dn);}
+    if(F.uc){c.fillStyle='#06080a'; c.fillRect(x,jy-upH-2.5,cw,2.2);}
+    if(F.ol){c.fillStyle='rgba(240,192,74,.55)'; c.fillRect(x,jy+dn,cw,2);}
+    if(ln.pore[i]){c.fillStyle='#0a0c0e'; c.beginPath(); c.arc(x+cw/2,jy-upH*0.4,1.6,0,6.283); c.fill();}
+  }
+  // craters
+  for(const cr of ln.craters){ if(craterFilled(ln,cr)) continue; c.fillStyle='rgba(8,10,12,.85)'; c.beginPath(); c.ellipse(X(cr.x),jy-6,3.2,5,0,0,6.283); c.fill(); }
+  // ghost guide
+  if(S.guide&&S.arc){
+    const gx=S.ghostX0+vTarget()*(S.now-S.ghostT0);
+    if(gx<=152){const x=X(gx); c.strokeStyle='rgba(92,203,139,.55)'; c.setLineDash([4,4]); c.beginPath(); c.moveTo(x,jy-70); c.lineTo(x,jy+40); c.stroke(); c.setLineDash([]);
+      c.fillStyle='#5ccb8b'; c.beginPath(); c.moveTo(x,H-30); c.lineTo(x-6,H-40); c.lineTo(x+6,H-40); c.closePath(); c.fill();}
+  }
+  // helmet lens + arc glow
+  if(S.arc){
+    c.fillStyle='rgba(4,20,10,.5)'; c.fillRect(0,0,W,H);
+    const fl=reduce?1:0.85+Math.random()*0.3, gx=S.tipX, gy=jy-S.arcLen*VS*0.5;
+    c.save(); c.globalCompositeOperation='lighter';
+    let g=c.createRadialGradient(gx,gy,0,gx,gy,90*fl); g.addColorStop(0,'rgba(255,240,210,.9)'); g.addColorStop(.25,'rgba(255,150,60,.45)'); g.addColorStop(1,'rgba(255,120,30,0)');
+    c.fillStyle=g; c.fillRect(gx-100,gy-100,200,200);
+    g=c.createRadialGradient(gx,gy,0,gx,gy,14); g.addColorStop(0,'rgba(235,248,255,1)'); g.addColorStop(1,'rgba(190,226,255,0)');
+    c.fillStyle=g; c.fillRect(gx-16,gy-16,32,32);
+    c.restore();
+  }
+  // rod + holder
+  if(S.px!=null){
+    const rodPx=S.rodLen*VS;
+    c.lineCap='butt';
+    c.strokeStyle='#c8b386'; c.lineWidth=6; c.beginPath(); c.moveTo(S.px-6*SIN,S.py+6*COS); c.lineTo(S.tipX,S.tipY); c.stroke();
+    c.strokeStyle='#8e979c'; c.lineWidth=3; c.beginPath(); c.moveTo(S.px,S.py); c.lineTo(S.px-7*SIN,S.py+7*COS); c.stroke();
+    c.fillStyle=S.arc?'#fff1d6':'#5a4632'; c.fillRect(S.tipX-3,S.tipY-2,6,3);
+    c.save(); c.translate(S.px,S.py); c.rotate(PHI); c.fillStyle='#1d2327'; c.fillRect(-9,-46,18,46); c.fillStyle='#e0603c'; c.fillRect(-9,-46,18,6); c.restore();
+    if(!S.arc&&S.arcLen<12&&S.arcLen>-1){c.fillStyle='rgba(191,226,255,.8)'; c.font='11px "IBM Plex Mono",monospace'; c.textAlign='left'; c.fillText(S.arcLen.toFixed(1)+' mm',S.tipX+8,S.tipY+4);}
+  }
+  // sparks
+  c.strokeStyle='#ffb35a'; c.lineWidth=1.2;
+  for(const p of S.sparks){c.globalAlpha=clamp(p.life*2,0,1); c.beginPath(); c.moveTo(p.x,p.y); c.lineTo(p.x-p.vx*0.02,p.y-p.vy*0.02); c.stroke();}
+  c.globalAlpha=1;
+  // idle hint
+  const any=ln.area.some(a=>a>0.25);
+  if(!any&&!S.holding){
+    c.fillStyle='rgba(230,233,234,.85)'; c.font='13px "IBM Plex Sans KR",sans-serif'; c.textAlign='center';
+    c.fillText('누른 채로 봉 끝을 0 mm 쪽 용접선 가까이 내리면 아크가 켜져요',W/2,jy+52);
+    c.fillStyle='rgba(148,161,168,.9)'; c.font='12px "IBM Plex Sans KR",sans-serif';
+    c.fillText('아크 2–4mm 유지 · 봉이 타는 만큼 손을 내리기 · 오른쪽으로 운봉',W/2,jy+72);
+    c.strokeStyle='rgba(255,139,43,.8)'; c.beginPath(); c.arc(X(0),jy,9,0,6.283); c.stroke();
+  }
+  if(S.submitted){c.fillStyle='rgba(12,15,17,.55)'; c.fillRect(0,0,W,H); c.fillStyle='#e6e9ea'; c.font='16px "Black Han Sans",sans-serif'; c.textAlign='center'; c.fillText('제출 완료 · 새 시편을 눌러 다시 연습',W/2,40);}
+}
+function craterFilled(ln,cr){const a=Math.max(0,Math.floor((cr.x-1.5)/CW)),b=Math.min(N-1,Math.ceil((cr.x+1.5)/CW)); for(let i=a;i<=b;i++) if(ln.tC[i]>cr.t+0.2) return true; return false;}
+
+// ---- HUD ----
+function hud(){
+  const arcShown=S.arc||S.holding?S.arcLen:NaN;
+  $('hArc').innerHTML=isFinite(arcShown)&&arcShown<20?arcShown.toFixed(1)+' <small>mm</small>':'– <small>mm</small>';
+  $('nArc').style.left=(isFinite(arcShown)?clamp(arcShown/8,0,1)*100:0)+'%';
+  const vmax=6, lo=vForLeg(5.5), hi=vForLeg(3.5), vt=vTarget();
+  $('zSpd').style.left=clamp(lo/vmax,0,1)*100+'%'; $('zSpd').style.width=(clamp(hi/vmax,0,1)-clamp(lo/vmax,0,1))*100+'%';
+  $('tSpd').style.left=clamp(vt/vmax,0,1)*100+'%';
+  const v=S.arc?S.vEma:0;
+  $('hSpd').innerHTML=(S.arc?v.toFixed(1):'–')+' <small>mm/s · 목표 '+vt.toFixed(1)+'</small>';
+  $('nSpd').style.left=clamp(Math.max(0,v)/vmax,0,1)*100+'%';
+  let leg=NaN;
+  if(S.arc){const vv=Math.max(0.4,Math.abs(S.vEma)); leg=Math.sqrt(2*K*S.I/vv/1.15);}
+  $('hLeg').innerHTML=(isFinite(leg)?(leg>9?'9+':leg.toFixed(1)):'–')+' <small>mm</small>';
+  $('nLeg').style.left=(isFinite(leg)?clamp(leg/8,0,1)*100:0)+'%';
+  const tot=MODES[S.mode].rods, left=tot===Infinity?'∞':(tot-S.rodsUsed);
+  const pct=clamp((S.rodLen-STUB)/(ROD0-STUB),0,1);
+  $('hRod').innerHTML=Math.round(pct*100)+'% <small>· 예비 '+left+'</small>';
+  $('nRod').style.left=pct*100+'%';
+}
+
+// ---- inspection ----
+function drawChart(){
+  const c=cctx, r=chart.getBoundingClientRect(), W=r.width, H=r.height; if(!W) return;
+  const l=34, rr=10, t=10, b=34, ln=S.lines[S.cur]; if(!ln) return;
+  const X=mm=>l+mm/LEN*(W-l-rr), Y=v=>t+(1-v/8)*(H-t-b);
+  c.clearRect(0,0,W,H);
+  c.fillStyle='rgba(92,203,139,.10)'; c.fillRect(l,Y(6),W-l-rr,Y(2)-Y(6));
+  c.font='10px "IBM Plex Mono",monospace'; c.fillStyle='#94a1a8'; c.textAlign='right';
+  for(let v=0;v<=8;v+=2){c.strokeStyle=v===2||v===6?'rgba(92,203,139,.6)':'rgba(148,161,168,.15)'; c.beginPath(); c.moveTo(l,Y(v)+.5); c.lineTo(W-rr,Y(v)+.5); c.stroke(); c.fillText(v+'',l-6,Y(v)+3);}
+  c.textAlign='center';
+  for(let mm=0;mm<=150;mm+=25){c.fillText(mm+'',X(mm),H-b+14);}
+  c.textAlign='left'; c.fillText('mm',2,t+4);
+  // gaps
+  for(let i=4;i<=295;i++){ if(ln.area[i]<0.8){c.fillStyle='rgba(240,100,90,.12)'; c.fillRect(X(i*CW),t,(W-l-rr)/N+0.5,H-t-b);} }
+  const path=(key,col)=>{c.strokeStyle=col; c.lineWidth=1.8; c.beginPath(); let on=false;
+    for(let i=0;i<N;i++){const L=legs(ln,i); if(L.A<0.8){on=false;continue;} const x=X((i+.5)*CW), y=Y(clamp(L[key],0,8)); if(!on){c.moveTo(x,y);on=true;} else c.lineTo(x,y);} c.stroke();};
+  path('lh','#ff8b2b'); path('lv','#bfe2ff');
+  // defect row
+  const dy=H-b+20;
+  for(let i=0;i<N;i++){const L=legs(ln,i),F=flags(ln,i,L); const x=X(i*CW), w=Math.max(1,(W-l-rr)/N);
+    if(F.uc){c.fillStyle='#f0645a'; c.fillRect(x,dy,w+.5,4);} if(F.ol){c.fillStyle='#f0c04a'; c.fillRect(x,dy+5,w+.5,4);} if(F.lf){c.fillStyle='#b48cff'; c.fillRect(x,dy+10,w+.5,3);}
+    if(ln.pore[i]){c.fillStyle='#e6e9ea'; c.beginPath(); c.arc(x,Y(7.4),1.8,0,6.283); c.fill();}}
+  for(const cr of ln.craters){ if(!craterFilled(ln,cr)){c.fillStyle='#f0645a'; c.font='10px "IBM Plex Sans KR",sans-serif'; c.textAlign='center'; c.fillText('▼',X(cr.x),t+9);} }
+  const sx=X(S.follow&&S.arc?clamp(S.xmm,0,LEN):S.selX);
+  c.strokeStyle='rgba(230,233,234,.6)'; c.setLineDash([3,3]); c.beginPath(); c.moveTo(sx+.5,t); c.lineTo(sx+.5,H-b); c.stroke(); c.setLineDash([]);
+  if(!ln.area.some(a=>a>0.8)){c.fillStyle='#94a1a8'; c.font='13px "IBM Plex Sans KR",sans-serif'; c.textAlign='center'; c.fillText('용접하면 위치별 각장이 여기에 그려져요',(l+W)/2,(t+H-b)/2);}
+}
+function drawSection(){
+  const c=xctx, r=sec.getBoundingClientRect(), W=r.width, H=r.height; if(!W) return;
+  const ln=S.lines[S.cur]; if(!ln) return;
+  c.clearRect(0,0,W,H);
+  const xm=S.follow&&S.arc?clamp(S.xmm,0,LEN):S.selX, i=clamp(Math.round(xm/CW-0.5),0,N-1);
+  const L=legs(ln,i), F=flags(ln,i,L);
+  $('secX').textContent=xm.toFixed(0)+' mm 지점';
+  const s=Math.min(W/20,H/17), ox=W*0.36, oy=H*0.66;
+  const P=(x,y)=>[ox+x*s,oy-y*s];
+  // plates
+  c.fillStyle='#4a565d'; let p=P(-7,0),q=P(13,-6); c.fillRect(p[0],p[1],q[0]-p[0],q[1]-p[1]);
+  c.fillStyle='#56636b'; p=P(-6,11); q=P(0,0); c.fillRect(p[0],p[1],q[0]-p[0],q[1]-p[1]);
+  c.strokeStyle='#2c363c'; c.lineWidth=1; c.strokeRect(P(-7,0)[0]+.5,P(-7,0)[1]+.5,20*s,6*s); c.strokeRect(P(-6,11)[0]+.5,P(-6,11)[1]+.5,6*s,11*s);
+  c.font='11px "IBM Plex Sans KR",sans-serif'; c.fillStyle='#94a1a8'; c.textAlign='left';
+  c.fillText('수직판 t6',P(-6,11)[0],P(-6,11)[1]-6); c.fillText('수평판 t6',P(5,-3.5)[0],P(5,-3.5)[1]);
+  if(L.A<0.8){c.fillStyle='#f0645a'; c.font='14px "IBM Plex Sans KR",sans-serif'; c.textAlign='center'; c.fillText('미용접',P(3,3)[0],P(3,3)[1]); return;}
+  const lh=clamp(L.lh,0,11), lv=clamp(L.lv,0,10.5);
+  // fusion zone
+  const pen=clamp(0.5+(L.I-100)/45-Math.max(0,L.arc-4)*0.2,0.15,1.8)*(F.lf?0.4:1);
+  c.fillStyle='rgba(255,139,43,.22)'; c.beginPath();
+  c.moveTo(...P(lh+0.3,0)); c.quadraticCurveTo(...P(lh*0.5,-pen),...P(-pen,-pen*0.6)); c.quadraticCurveTo(...P(-pen,lv*0.5),...P(0,lv+0.3)); c.lineTo(...P(0,0)); c.closePath(); c.fill();
+  // bead
+  const bulge=L.conv*(lh+lv)*0.35;
+  c.fillStyle='#8c989f'; c.strokeStyle='#d3dadd'; c.lineWidth=1.4; c.beginPath();
+  c.moveTo(...P(0,0)); c.lineTo(...P(lh,0));
+  if(F.ol){c.lineTo(...P(lh+1.4,0.15)); c.lineTo(...P(lh+0.9,0.9));}
+  c.quadraticCurveTo(...P(lh/2+bulge,lv/2+bulge),...P(0,lv));
+  c.closePath(); c.fill(); c.stroke();
+  if(F.uc){c.fillStyle='#0b0e10'; c.beginPath(); c.moveTo(...P(0,lv+0.1)); c.lineTo(...P(-0.7,lv+0.5)); c.lineTo(...P(0,lv+1.2)); c.closePath(); c.fill(); c.fillStyle='#f0645a'; c.textAlign='right'; c.fillText('언더컷',P(-6.4,lv+0.6)[0],P(-6.4,lv+0.6)[1]);}
+  if(F.ol){c.fillStyle='#f0c04a'; c.textAlign='left'; c.fillText('오버랩',P(lh+1.6,0.8)[0],P(lh+1.6,0.8)[1]);}
+  // dims
+  const ok=v=>v>=2&&v<=6;
+  c.lineWidth=1; c.font='12px "IBM Plex Mono",monospace';
+  c.strokeStyle=c.fillStyle=ok(L.lh)?'#5ccb8b':'#f0645a';
+  let a=P(0,-6.8),bb=P(lh,-6.8); c.beginPath(); c.moveTo(a[0],a[1]); c.lineTo(bb[0],bb[1]); c.moveTo(a[0],a[1]-4); c.lineTo(a[0],a[1]+4); c.moveTo(bb[0],bb[1]-4); c.lineTo(bb[0],bb[1]+4); c.stroke();
+  c.textAlign='center'; c.fillText('수평 '+L.lh.toFixed(1),(a[0]+bb[0])/2,a[1]+15);
+  c.strokeStyle=c.fillStyle=ok(L.lv)?'#5ccb8b':'#f0645a';
+  a=P(-6.8,0); bb=P(-6.8,lv); c.beginPath(); c.moveTo(a[0],a[1]); c.lineTo(bb[0],bb[1]); c.moveTo(a[0]-4,a[1]); c.lineTo(a[0]+4,a[1]); c.moveTo(bb[0]-4,bb[1]); c.lineTo(bb[0]+4,bb[1]); c.stroke();
+  c.save(); c.translate(a[0]-8,(a[1]+bb[1])/2); c.rotate(-Math.PI/2); c.fillText('수직 '+L.lv.toFixed(1),0,0); c.restore();
+  c.fillStyle='#94a1a8'; c.textAlign='right'; c.font='11px "IBM Plex Mono",monospace';
+  c.fillText(`${L.I.toFixed(0)}A · 아크 ${L.arc.toFixed(1)} · ${L.v.toFixed(1)}mm/s · ${L.ang.toFixed(0)}°`,W-6,H-6);
+}
+
+// ---- report ----
+function analyze(ln){
+  let tot=0,weld=0,gap=0,inR=0,out=0,sum=0,sum2=0,bal=0,uc=0,ol=0,lf=0,pores=0,sA=0,sV=0,sAng=0,sI=0,lhS=0,lvS=0,minL=99,maxL=0;
+  for(let i=4;i<=295;i++){
+    tot++; const L=legs(ln,i);
+    if(L.A<0.8){gap++;continue;}
+    weld++; const F=flags(ln,i,L);
+    const good=L.lh>=2&&L.lh<=6&&L.lv>=2&&L.lv<=6; good?inR++:out++;
+    const m=(L.lh+L.lv)/2; sum+=m; sum2+=m*m; bal+=Math.abs(L.lh-L.lv); lhS+=L.lh; lvS+=L.lv;
+    minL=Math.min(minL,L.lh,L.lv); maxL=Math.max(maxL,L.lh,L.lv);
+    sA+=L.arc; sV+=L.v; sAng+=L.ang; sI+=L.I;
+    if(F.uc)uc++; if(F.ol)ol++; if(F.lf)lf++; if(ln.pore[i])pores++;
+  }
+  const craters=ln.craters.filter(c=>!craterFilled(ln,c)).length;
+  const n=Math.max(1,weld), mean=sum/n, sd=Math.sqrt(Math.max(0,sum2/n-mean*mean));
+  return {tot,weld,gap,inR,out,mean,sd,bal:bal/n,uc:uc*CW,ol:ol*CW,lf:lf*CW,pores,craters,arc:sA/n,v:sV/n,ang:sAng/n,I:sI/n,lh:lhS/n,lv:lvS/n,minL,maxL};
+}
+function report(){
+  const res=S.lines.map(analyze), any=res.some(r=>r.weld>0);
+  const reasons=[]; let score=0;
+  res.forEach((r,k)=>{
+    const tag=res.length>1?`용접선 ${k+1}: `:'';
+    if(r.weld===0){reasons.push(tag+'용접하지 않음'); return;}
+    if(r.gap>0) reasons.push(tag+`본 용접구간 미용접 ${(r.gap*CW).toFixed(1)}mm`);
+    if(r.out>0) reasons.push(tag+`각장 2–6mm 벗어남 ${(r.out*CW).toFixed(1)}mm (최소 ${r.minL.toFixed(1)} / 최대 ${r.maxL.toFixed(1)})`);
+    const range=40*r.inR/r.tot, uni=20*clamp(1-(r.sd-0.25)/1.0,0,1), bal=15*clamp(1-(r.bal-0.4)/1.6,0,1);
+    const def=clamp(25-(r.uc*0.6+r.ol*0.6+r.lf*0.4+r.pores*2+r.craters*3),0,25);
+    r.parts={range,uni,bal,def}; score+=range+uni+bal+def;
+  });
+  score=Math.round(score/res.length);
+  const pass=any&&reasons.length===0;
+  const box=$('report');
+  $('repState').textContent=S.submitted?'제출됨':S.demo?'시범 비드':any?'진행 중 (실시간)':'';
+  if(!any){box.innerHTML='<p class="hint" style="grid-column:1/-1">용접을 시작하면 각장 범위, 균일성, 결함을 바로 판정해 드려요.</p>'; return {any};}
+  const r0=res[S.cur].weld?res[S.cur]:res.find(r=>r.weld);
+  const P=r0.parts||{range:0,uni:0,bal:0,def:0};
+  const bar=(name,v,max)=>`<div class="m"><span>${name}</span><div class="track"><div class="fill" style="width:${(v/max*100).toFixed(0)}%"></div></div><span>${v.toFixed(0)} / ${max}</span></div>`;
+  const all={weld:0}; // averaged display uses current line
+  const tips=makeTips(r0);
+  box.innerHTML=`
+    <div class="verdict">
+      <div class="score">${score}<small> / 100</small></div>
+      <span class="pill ${pass?'ok':'bad'}">${pass?'실격 사유 없음':'이대로 제출하면 0점'}</span>
+      ${reasons.length?`<ul class="reasons">${reasons.map(x=>`<li>${x}</li>`).join('')}</ul>`:'<p class="hint">각장 범위와 용접구간 조건을 모두 만족했어요. 점수는 균일성과 결함으로 갈립니다.</p>'}
+      <div class="metrics">${bar('각장 범위',P.range,40)}${bar('균일성',P.uni,20)}${bar('수평·수직 균형',P.bal,15)}${bar('결함',P.def,25)}</div>
+    </div>
+    <div style="display:grid;gap:12px;align-content:start;min-width:0">
+      <div class="stats">
+        <div><div class="k">평균 각장 수평/수직</div><div class="v">${r0.lh.toFixed(1)} / ${r0.lv.toFixed(1)}</div></div>
+        <div><div class="k">각장 편차(σ)</div><div class="v">${r0.sd.toFixed(2)} mm</div></div>
+        <div><div class="k">평균 속도</div><div class="v">${r0.v.toFixed(1)} mm/s</div></div>
+        <div><div class="k">평균 아크 길이</div><div class="v">${r0.arc.toFixed(1)} mm</div></div>
+        <div><div class="k">언더컷/오버랩</div><div class="v">${r0.uc.toFixed(0)} / ${r0.ol.toFixed(0)} mm</div></div>
+        <div><div class="k">기공·크레이터</div><div class="v">${r0.pores} · ${r0.craters}</div></div>
+      </div>
+      <div><h2 style="margin-bottom:6px">다음 판에서 고칠 것</h2><ul class="tips">${tips.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    </div>`;
+  return {any,pass,score,reasons};
+}
+function makeTips(r){
+  const t=[], vt=vTarget();
+  if(r.gap>0) t.push('시작은 0mm 끝에서 아크를 켜고 잠깐 머물렀다 출발, 끝은 150mm에서 0.5초 정도 멈춰 크레이터를 채우세요. 이어 붙일 땐 크레이터 위로 되돌아와 겹치게.');
+  if(r.minL<2) t.push(`각장이 2mm 아래로 떨어진 곳이 있어요. 그 구간에서 속도가 빨랐어요. 목표 ${vt.toFixed(1)}mm/s, 가이드 삼각형보다 앞서가지 마세요.`);
+  if(r.maxL>6) t.push('6mm를 넘은 곳이 있어요. 한 자리에 머물거나 너무 느렸던 곳입니다. 재시작 지점에서 특히 잘 생겨요.');
+  if(r.sd>0.6) t.push(`각장이 들쭉날쭉해요 (σ ${r.sd.toFixed(2)}mm). 손목이 아니라 팔 전체로 일정하게 밀고, 속도 게이지 바늘을 목표선에 붙여 두세요.`);
+  if(r.arc>4) t.push(`아크가 평균 ${r.arc.toFixed(1)}mm로 길어요. 봉이 타면서 계속 짧아지니 손을 꾸준히 내려야 해요. 소리를 켜면 길어질 때 '쉬익' 소리가 커져요.`);
+  else if(r.arc<2.2) t.push('아크가 짧아 봉이 붙기 쉬워요. 봉 지름(약 3mm)만큼 띄우세요.');
+  if(r.lv<r.lh-0.6) t.push(`수직 각장이 ${(r.lh-r.lv).toFixed(1)}mm 짧아요. 쇳물이 아래로 처지는 중이니 작업각을 2–4° 세워 보세요.`);
+  else if(r.lv>r.lh+0.6) t.push('수직 각장이 더 길어요. 작업각을 조금 눕히세요 (수직판 언더컷 위험).');
+  if(r.uc>0) t.push('언더컷: 전류를 5–10A 낮추거나 아크를 짧게, 속도를 조금 늦추세요.');
+  if(r.ol>0) t.push('오버랩: 전류가 낮거나 너무 느려서 쇳물이 녹지 않은 채 쌓였어요. 전류를 올리거나 속도를 조금 높이세요.');
+  if(r.lf>0) t.push('융합 불량: 낮은 전류·긴 아크·빠른 속도, 또는 차가운 시작점에서 생겨요. 시작점에서 잠깐 예열하듯 머무르세요.');
+  if(r.craters>0) t.push(`채우지 않은 크레이터가 ${r.craters}개 있어요. 아크를 끊을 땐 잠깐 멈춰 채우거나, 다음 봉으로 그 위를 덮어 지나가세요.`);
+  if(!t.length) t.push('좋아요. 도면 모드(봉 3개)로 같은 품질을 두 줄 연속으로 내 보세요.');
+  return t.slice(0,4);
+}
+
+// ---- history ----
+const HK='fillet-sim-history';
+function loadHist(){try{return JSON.parse(localStorage.getItem(HK)||'[]');}catch(_){return [];}}
+function saveHist(r){const h=loadHist(); const d=new Date(); h.unshift({d:`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`,m:MODES[S.mode].label,I:S.I,a:S.ang,s:r.score,p:r.pass}); try{localStorage.setItem(HK,JSON.stringify(h.slice(0,12)));}catch(_){} renderHist();}
+function renderHist(){const h=loadHist(), el=$('hist');
+  el.innerHTML=h.length?h.map(x=>`<div><span>${x.d} · ${x.m} · ${x.I}A ${x.a}°</span><span style="color:${x.p?'var(--ok)':'var(--bad)'}">${x.s}점 ${x.p?'통과':'실격'}</span></div>`).join(''):'<span>제출한 작품이 여기에 쌓여요. 점수가 오르는지 확인하세요.</span>';}
+
+// ---- loop ----
+let last=performance.now(), frame=0;
+function loop(t){
+  const dt=clamp((t-last)/1000,0.001,0.05); last=t;
+  step(dt); drawSim(); sound();
+  if(frame%3===0) hud();
+  if(frame%8===0&&(S.arc||S.demo==='live')){drawChart(); drawSection(); if(frame%24===0) report();}
+  if(msgTimer>0){msgTimer-=dt; if(msgTimer<=0) msg('');}
+  frame++; requestAnimationFrame(loop);
+}
+const ro=new ResizeObserver(()=>resize()); ro.observe(sim); ro.observe(chart);
+resize(); reset(); S.ang=48; $('ang').value=48; $('angO').textContent='48°';
+startDemo(true); drawChart(); drawSection(); renderHist(); hud();
+requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>
