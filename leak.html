@@ -1,0 +1,1146 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="설비보전기사 3과제 보수 용접·일주 용접·누수 시험 연습 시뮬레이터">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>보수 용접·누수 연습기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: 작업대 — 위 공정 스텝(1 도면 → 2 보수 → 3 일주 → 4 누수), 왼쪽 위에서 본 작업 화면, 오른쪽 세팅 레일, 아래 검사 스트립. 차광면 느낌 단일 다크 테마(의도적), 물은 냉청색 하나만. */
+:root{
+  color-scheme: dark;
+  --bg:#13171a; --panel:#1a2024; --panel2:#20272c; --line:#2c363c;
+  --fg:#e6e9ea; --muted:#94a1a8; --molten:#ff8b2b; --arc:#bfe2ff; --water:#4fb3e8;
+  --ok:#5ccb8b; --warn:#f0c04a; --bad:#f0645a; --scrim:rgba(12,15,17,.84);
+  --f-display:"Black Han Sans","IBM Plex Sans KR",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.55;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:22px 56px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 24px;border-bottom:1px solid var(--line);padding-bottom:14px}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(28px,5vw,40px);line-height:1.05;margin:0;letter-spacing:.01em;text-wrap:balance}
+h1 em{font-style:normal;color:var(--molten)}
+.sub{color:var(--muted);font-size:13.5px;margin:6px 0 0;max-width:70ch}
+.spec{font-family:var(--f-mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 14px}
+.spec b{color:var(--fg);font-weight:600}
+.spec .late{color:var(--bad)}
+.maker{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;border:1px solid var(--line);border-left:4px solid var(--molten);background:var(--panel);padding:12px 16px}
+.maker .k{font-size:12px;letter-spacing:.12em}
+.maker strong{font-family:var(--f-display);font-weight:400;font-size:clamp(20px,3.6vw,30px);line-height:1.15}
+.maker strong span{color:var(--molten)}
+.maker a{margin-left:auto;font-size:13px;color:var(--arc)}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line)}
+.steps button{font:inherit;color:var(--muted);background:var(--panel);border:0;border-right:1px solid var(--line);padding:10px 12px;text-align:left;cursor:pointer;display:grid;gap:2px;min-width:0}
+.steps button:last-child{border-right:0}
+.steps .n{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em}
+.steps .t{font-size:14.5px;font-weight:700;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.steps .s{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.steps button[aria-current="step"]{background:var(--panel2);box-shadow:inset 0 -3px 0 var(--molten)}
+.steps .s.ok{color:var(--ok)} .steps .s.bad{color:var(--bad)}
+@media(max-width:620px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}.steps button:nth-child(2){border-right:0}.steps button:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+.bench{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+@media(max-width:880px){.bench{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;border:1px solid var(--line);background:#0c0f11;min-width:0}
+#sim{display:block;width:100%;height:480px;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none}
+@media(max-width:560px){#sim{height:420px}}
+.msg{position:absolute;left:10px;right:10px;top:10px;pointer-events:none;font-size:13px;line-height:1.45;background:var(--scrim);border-left:3px solid var(--molten);padding:7px 10px}
+.msg[data-tone="bad"]{border-left-color:var(--bad)}
+.msg[data-tone="ok"]{border-left-color:var(--ok)}
+.msg[data-tone="water"]{border-left-color:var(--water)}
+.hud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--line)}
+.g{padding:10px 12px;border-right:1px solid var(--line);min-width:0}
+.g:last-child{border-right:0}
+.k{font-size:11px;letter-spacing:.06em;color:var(--muted)}
+.v{font-family:var(--f-mono);font-size:19px;font-variant-numeric:tabular-nums;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v small{font-size:12px;color:var(--muted)}
+.bar{height:6px;background:var(--line);position:relative;margin-top:6px}
+.bar .zone{position:absolute;top:0;bottom:0;background:rgba(92,203,139,.35)}
+.bar .needle{position:absolute;top:-3px;width:3px;height:12px;background:var(--fg);transform:translateX(-1px);transition:left .08s linear}
+@media(max-width:560px){.hud{grid-template-columns:repeat(2,minmax(0,1fr))}.g:nth-child(2){border-right:0}.g:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+.rail{border:1px solid var(--line);background:var(--panel)}
+.rail section{padding:14px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+.rail section:last-child{border-bottom:0}
+.rail h2,.panel h2{font-size:12px;letter-spacing:.08em;color:var(--muted);margin:0;font-weight:500}
+label.f{display:grid;gap:4px;font-size:13.5px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.row output{font-family:var(--f-mono);font-size:14px;color:var(--molten);font-variant-numeric:tabular-nums}
+.hint{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0}
+.hint b{color:var(--fg);font-weight:500}
+select,button{font:inherit;color:var(--fg)}
+select{background:var(--panel2);border:1px solid var(--line);padding:8px 10px;width:100%}
+input[type=range]{width:100%;accent-color:var(--molten)}
+.chk{display:flex;align-items:center;gap:8px;font-size:13.5px}
+.chk input{accent-color:var(--molten);width:16px;height:16px}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btns button{background:var(--panel2);border:1px solid var(--line);padding:9px 10px;cursor:pointer;font-size:13.5px}
+.btns button:hover:not(:disabled){border-color:var(--muted)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--arc);outline-offset:2px}
+.btns button:disabled{opacity:.4;cursor:not-allowed}
+.btns .primary{grid-column:1/-1;background:var(--water);border-color:var(--water);color:#06131b;font-weight:700}
+.inspect{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
+@media(max-width:780px){.inspect{grid-template-columns:minmax(0,1fr)}}
+.panel{border:1px solid var(--line);background:var(--panel);padding:14px;min-width:0;display:grid;gap:10px;align-content:start}
+.panel canvas{display:block;width:100%;height:240px}
+#chart{cursor:pointer}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px}
+.report{display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.4fr);gap:18px}
+@media(max-width:780px){.report{grid-template-columns:minmax(0,1fr)}}
+.score{font-family:var(--f-display);font-size:60px;line-height:1;font-variant-numeric:tabular-nums}
+.score small{font-family:var(--f-body);font-size:15px;color:var(--muted)}
+.pill{display:inline-block;font-size:12.5px;font-weight:700;padding:3px 9px;border:1px solid currentColor;width:max-content}
+.pill.ok{color:var(--ok)} .pill.bad{color:var(--bad)} .pill.wait{color:var(--muted)}
+.checks{display:grid;gap:2px}
+.checks .grp{font-size:12px;letter-spacing:.08em;color:var(--muted);margin-top:8px}
+.checks .grp:first-child{margin-top:0}
+.ck{display:grid;grid-template-columns:1.4em minmax(0,1fr) auto;gap:8px;align-items:baseline;font-size:13.5px;padding:3px 0;border-bottom:1px dashed var(--line)}
+.ck .d{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.ck .m{font-weight:700}
+.ck.ok .m{color:var(--ok)} .ck.bad .m{color:var(--bad)} .ck.wait .m{color:var(--muted)}
+.ck.bad span:nth-child(2){color:var(--fg)}
+.tips{margin:0;padding-left:18px;display:grid;gap:6px;font-size:14px}
+.tips li::marker{color:var(--molten)}
+.guide{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+@media(max-width:880px){.guide{grid-template-columns:minmax(0,1fr)}}
+.guide ol,.guide ul{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px}
+.guide h3{font-size:14px;margin:0 0 6px;font-weight:700}
+.guide table{border-collapse:collapse;width:100%;font-size:13px}
+.guide td,.guide th{border-bottom:1px solid var(--line);padding:5px 4px;text-align:left;vertical-align:top}
+.guide th{color:var(--muted);font-weight:500;font-size:12px}
+.guide td.n{font-family:var(--f-mono);color:var(--molten);white-space:nowrap}
+.hist{font-family:var(--f-mono);font-size:12.5px;display:grid;gap:3px;color:var(--muted)}
+.hist div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--line);padding-bottom:3px;flex-wrap:wrap}
+.foot{font-size:12px;color:var(--muted);margin:0}
+[hidden]{display:none!important}
+.legend:empty{display:none}
+@media (prefers-reduced-motion: reduce){.bar .needle{transition:none}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>보수 용접·<em>누수</em> 연습기</h1>
+      <p class="sub">설비보전기사 3과제 · 연강판 200×80 6t + 40A 파이프 · E4313 Ø3.2 봉 3개 — 구멍 메우기, 파이프 일주 필릿, 물 붓기 누수 시험까지 한 판으로</p>
+    </div>
+    <div class="spec"><span>일주 폭·높이 <b>4.8–9.6 mm</b></span><span>보수 표면비드 <b>≤ 6 mm</b></span><span id="clock">시험시간 <b>40:00</b></span></div>
+  </header>
+
+  <div class="maker" aria-label="제작자">
+    <span class="k">제작자</span>
+    <strong>한국폴리텍대학 진주캠퍼스 자동화과 <span>장성욱</span></strong>
+    <a href="./index.html" id="toFillet">필릿 용접 연습기 →</a>
+  </div>
+
+  <nav class="steps" aria-label="작업 단계">
+    <button data-stage="read"><span class="n">1</span><span class="t">도면 읽기</span><span class="s" id="s-read">위치 표시</span></button>
+    <button data-stage="repair"><span class="n">2</span><span class="t">보수 용접</span><span class="s" id="s-repair">Ø12 구멍 메우기</span></button>
+    <button data-stage="pipe"><span class="n">3</span><span class="t">일주 용접</span><span class="s" id="s-pipe">파이프 z6 필릿</span></button>
+    <button data-stage="leak"><span class="n">4</span><span class="t">누수 시험</span><span class="s" id="s-leak">물 붓고 3분</span></button>
+  </nav>
+
+  <div class="bench">
+    <div class="stage">
+      <canvas id="sim" aria-label="작업 화면. 누른 채로 움직여 용접합니다."></canvas>
+      <div class="msg" id="msg" hidden></div>
+      <div class="hud" id="hud">
+        <div class="g"><div class="k" id="k0">–</div><div class="v" id="v0">–</div><div class="bar"><span class="zone" id="z0"></span><span class="needle" id="n0"></span></div></div>
+        <div class="g"><div class="k" id="k1">–</div><div class="v" id="v1">–</div><div class="bar"><span class="zone" id="z1"></span><span class="needle" id="n1"></span></div></div>
+        <div class="g"><div class="k" id="k2">–</div><div class="v" id="v2">–</div><div class="bar"><span class="zone" id="z2"></span><span class="needle" id="n2"></span></div></div>
+        <div class="g"><div class="k" id="k3">–</div><div class="v" id="v3">–</div><div class="bar"><span class="zone" id="z3"></span><span class="needle" id="n3" style="background:var(--molten)"></span></div></div>
+      </div>
+    </div>
+
+    <aside class="rail">
+      <section>
+        <h2>작품</h2>
+        <select id="draw" aria-label="도면 번호">
+          <option value="1">도면 ①</option><option value="2">도면 ②</option><option value="3">도면 ③</option><option value="4">도면 ④</option>
+          <option value="5">도면 ⑤</option><option value="6">도면 ⑥</option><option value="7">도면 ⑦</option><option value="8">도면 ⑧</option>
+        </select>
+        <select id="mode" aria-label="연습 방식">
+          <option value="exam">시험처럼 · 봉 3개 · 40분</option>
+          <option value="free">자유 연습 · 봉 무제한</option>
+        </select>
+      </section>
+      <section>
+        <h2>용접기</h2>
+        <label class="f" for="amp"><span class="row"><span>용접 전류</span><output id="ampO">115 A</output></span>
+          <input type="range" id="amp" min="90" max="160" step="5" value="115"></label>
+        <p class="hint" id="ampHint">보수 용접은 녹아내리지 않게 조금 낮게, 일주 용접은 120A 안팎이 무난해요.</p>
+        <label class="chk"><input type="checkbox" id="guide" checked> 가이드 표시</label>
+        <label class="chk"><input type="checkbox" id="sound"> 아크 소리</label>
+      </section>
+      <section>
+        <h2>작업</h2>
+        <div class="btns">
+          <button id="bRod">봉 교체</button>
+          <button id="bDemo">시범 보기</button>
+          <button id="bNew">새 작품</button>
+          <button id="bClear">이 단계 다시</button>
+          <button id="bSubmit" class="primary">작품 제출 · 누수 시험</button>
+        </div>
+        <p class="hint" id="stageHint"></p>
+      </section>
+    </aside>
+  </div>
+
+  <div class="inspect" id="inspect">
+    <div class="panel">
+      <div class="row"><h2 id="leftTitle">단면</h2><span class="hint" id="leftNote"></span></div>
+      <canvas id="chart"></canvas>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="panel">
+      <div class="row"><h2 id="rightTitle">뒷면</h2><span class="hint" id="rightNote"></span></div>
+      <canvas id="section"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><h2>판정 (연습용 자체 점수 · 공식 채점기준 아님)</h2><span class="hint" id="repState"></span></div>
+    <div class="report" id="report"></div>
+  </div>
+
+  <div class="panel guide">
+    <div>
+      <h3>보수 용접 (구멍 메우기)</h3>
+      <ul>
+        <li>구멍 한가운데를 바로 겨누면 밑에 받쳐 줄 쇳물이 없어서 그대로 떨어져요(용락).</li>
+        <li><b>가장자리 모재 위</b>에서 아크를 켜고 둘레를 돌며 안쪽으로 한 겹씩 좁혀 들어갑니다.</li>
+        <li>열이 쌓이면 얇은 다리가 녹아 뚫려요. 위험 게이지가 노랗게 되면 <b>손을 떼고 1–2초 식힌 뒤</b> 다시 켜세요(끊어치기).</li>
+        <li>다 메운 뒤 덧살은 6mm를 넘기지 않게. 같은 자리를 계속 돌면 높이가 금방 올라가요.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>일주 용접 (파이프 온둘레 필릿)</h3>
+      <ul>
+        <li>파이프와 판이 만나는 <b>모서리(루트)</b>를 따라 돌아요. 점선 원이 겨눌 선이에요.</li>
+        <li>판 쪽으로 벌어지면 폭만 넓고 높이가 낮아져요. 파이프 쪽으로 0.5mm 정도 붙이면 균형이 맞아요.</li>
+        <li>한 바퀴에 봉 2개 가까이 들어가요. 봉을 갈면 크레이터 <b>앞쪽에서 켜고 되돌아와</b> 겹치세요.</li>
+        <li>마지막은 시작점을 10mm 이상 덮고 끝냅니다. 시작점이 차가운 채로 남으면 누수가 나요.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>이 연습기에서 쓰는 기준</h3>
+      <table>
+        <tr><th>항목</th><th>값</th></tr>
+        <tr><td>일주 비드 폭·높이</td><td class="n">4.8–9.6 mm</td></tr>
+        <tr><td>보수 표면비드 높이</td><td class="n">≤ 6 mm</td></tr>
+        <tr><td>용접구간 미용접</td><td class="n">10 mm 이상 실격</td></tr>
+        <tr><td>치수</td><td class="n">±5 mm 초과 실격</td></tr>
+        <tr><td>누수 시험</td><td class="n">냉각 10분 → 물 3분</td></tr>
+      </table>
+      <p class="foot" style="margin-top:8px">위에서 내려다본 화면이라 아크 길이는 일정하다고 보고, 겨냥·속도·전류·열 관리만 다룹니다. 손 감각을 익히기 위한 단순화 모델이에요.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>최근 기록 (이 브라우저에만 저장)</h2>
+    <div class="hist" id="hist"></div>
+  </div>
+</div>
+
+<script>
+const M=(()=>{
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const K=0.244;
+// ---------- 보수 용접 (Ø12 구멍, 6t) ----------
+const RG=0.4, RN=80, RH=RN*RG/2, HOLE_R=6, SUP=4;
+function createRepair(){
+  const n=RN*RN, hole=new Uint8Array(n), noise=new Float32Array(n);
+  let s=11; const rnd=()=>((s=(s*16807)%2147483647)/2147483647);
+  for(let j=0;j<RN;j++)for(let i=0;i<RN;i++){const x=(i+.5)*RG-RH,y=(j+.5)*RG-RH,k=j*RN+i; if(x*x+y*y<HOLE_R*HOLE_R) hole[k]=1; noise[k]=rnd();}
+  return {hole,noise,dep:new Float32Array(n),T:new Float32Array(n),T2:new Float32Array(n),back:new Float32Array(n),tC:new Float32Array(n).fill(-99),
+    sag:0,burns:0,arcTime:0,started:false,lastFall:-99,lastBurn:-99};
+}
+const solidR=(R,k)=>!R.hole[k]||R.dep[k]>=2.0;
+function supportedR(R,i,j){
+  const k=j*RN+i; if(solidR(R,k)) return true;
+  for(let dj=-SUP;dj<=SUP;dj++){const jj=j+dj; if(jj<0||jj>=RN) continue;
+    for(let di=-SUP;di<=SUP;di++){const ii=i+di; if(ii<0||ii>=RN||(di===0&&dj===0)) continue; if(solidR(R,jj*RN+ii)) return true;}}
+  return false;
+}
+function cellOf(x,y){return [clamp(Math.floor((x+RH)/RG),0,RN-1),clamp(Math.floor((y+RH)/RG),0,RN-1)];}
+function canStrikeR(R,x,y){if(Math.abs(x)>RH-0.5||Math.abs(y)>RH-0.5) return false; const [i,j]=cellOf(x,y); return supportedR(R,i,j);}
+const HEAT=1.5, FLOW=12, COOL=0.4, FT=0.2, TB0=1.0, TB1=0.3;
+function repairStep(R,dt,a,now){
+  const ev={fall:0,burn:0};
+  if(a.on){
+    R.started=true; R.arcTime+=dt;
+    const I=a.I, [ci,cj]=cellOf(a.x,a.y);
+    const centerOK=supportedR(R,ci,cj);
+    const Q=K*I*dt*(a.loss||1), sg=1.8, inv=1/(2*sg*sg), norm=1/(2*Math.PI*sg*sg);
+    const hr=Math.pow(I/120,2.2)*HEAT*dt, sh=1.4, invh=1/(2*sh*sh), rad=Math.ceil(3*sg/RG);
+    if(!centerOK){ R.sag+=Q; ev.fall+=Q; R.back[cj*RN+ci]+=Q/(RG*RG)*0.3; R.lastFall=now; }
+    for(let j=Math.max(0,cj-rad);j<=Math.min(RN-1,cj+rad);j++) for(let i=Math.max(0,ci-rad);i<=Math.min(RN-1,ci+rad);i++){
+      const x=(i+.5)*RG-RH-a.x, y=(j+.5)*RG-RH-a.y, d2=x*x+y*y; if(d2>9*sg*sg) continue;
+      const k=j*RN+i;
+      if(centerOK){
+        const add=Q*Math.exp(-d2*inv)*norm;
+        if(!R.hole[k]||R.dep[k]>=2.0||supportedR(R,i,j)) R.dep[k]+=add;
+      }
+      const thin=R.hole[k]?clamp(6/(R.dep[k]+1.5),1,3):0.6;
+      R.T[k]+=hr*Math.exp(-d2*invh)*thin;
+      if(d2<0.12) R.tC[k]=now;
+    }
+  }
+  // diffusion (2 passes) + cooling
+  const D=5, al=Math.min(0.24,D*dt/(2*RG*RG));
+  for(let p=0;p<2;p++){
+    const A=R.T, B=R.T2;
+    for(let j=0;j<RN;j++)for(let i=0;i<RN;i++){const k=j*RN+i, c=A[k];
+      const l=i>0?A[k-1]:c, r=i<RN-1?A[k+1]:c, u=j>0?A[k-RN]:c, d=j<RN-1?A[k+RN]:c;
+      B[k]=c+al*(l+r+u+d-4*c);}
+    R.T=B; R.T2=A;
+  }
+  const cool=Math.exp(-COOL*dt);
+  for(let k=0;k<RN*RN;k++){
+    R.T[k]*=cool;
+    if(R.hole[k]&&R.dep[k]>0.05&&R.dep[k]<4.5&&R.T[k]>TB0+TB1*R.dep[k]){
+      const v=R.dep[k]*RG*RG; R.sag+=v; ev.burn+=v; R.back[k]+=R.dep[k]; R.dep[k]=0; R.burns++; R.lastBurn=now; R.T[k]*=0.6;
+    }
+  }
+  // 녹은 쇳물은 낮은 쪽(구멍)으로 흘러든다
+  const fl=Math.min(0.25,FLOW*dt);
+  for(let j=1;j<RN-1;j++)for(let i=1;i<RN-1;i++){const k=j*RN+i; if(R.T[k]<FT||R.dep[k]<=0.01) continue;
+    const hk=(R.hole[k]?0:6)+R.dep[k];
+    for(let q=0;q<4;q++){const n=q===0?k-1:q===1?k+1:q===2?k-RN:k+RN;
+      const diff=hk-((R.hole[n]?0:6)+R.dep[n]); if(diff<=0.4) continue;
+      if(R.hole[n]&&R.dep[n]<2.0&&!supportedR(R,n%RN,(n/RN)|0)) continue;
+      const m=Math.min(R.dep[k],fl*(diff-0.4)/4); R.dep[k]-=m; R.dep[n]+=m;}}
+  return ev;
+}
+function riskR(R,x,y){ // 0..1+ : heat vs burn threshold at nearest thin hole cell around tip
+  const [ci,cj]=cellOf(x,y); let m=0;
+  for(let dj=-4;dj<=4;dj++)for(let di=-4;di<=4;di++){const i=ci+di,j=cj+dj; if(i<0||j<0||i>=RN||j>=RN) continue; const k=j*RN+i;
+    if(R.hole[k]&&R.dep[k]<4.5){const r=R.T[k]/(TB0+TB1*R.dep[k]); if(r>m) m=r;}}
+  return m;
+}
+function repairEval(R){
+  let hc=0,unf=0,thr=0,maxH=0,minTop=99;
+  for(let k=0;k<RN*RN;k++){
+    const top=(R.hole[k]?R.dep[k]:6+R.dep[k])-6; if(top>maxH) maxH=top;
+    if(R.hole[k]){hc++; if(R.dep[k]<5.7) unf++; if(R.dep[k]<1.2) thr++; if(R.dep[k]<minTop) minTop=R.dep[k];}
+  }
+  return {started:R.started,fill:1-unf/hc,unfMM2:unf*RG*RG,through:thr,sag:R.sag,burns:R.burns,maxH,arcTime:R.arcTime};
+}
+
+// ---------- 일주 용접 (40A 파이프 OD48.6) ----------
+const PR=24.3, PN=360, PCL=2*Math.PI*PR/PN;
+function createPipe(){return {area:new Float32Array(PN),ws:new Float32Array(PN),eS:new Float32Array(PN),iS:new Float32Array(PN),vS:new Float32Array(PN),
+  uMax:new Float32Array(PN),hot:new Float32Array(PN).fill(-99),tC:new Float32Array(PN).fill(-99),cold:new Uint8Array(PN),craters:[],started:false,arcTime:0};}
+function pipeDeposit(P,th,dt,p,now){
+  P.started=true; P.arcTime+=dt;
+  const c=((th/(2*Math.PI)*PN)%PN+PN)%PN, sg=1.8, span=Math.ceil(3*sg/PCL);
+  const vol=K*p.I*dt, norm=1/(sg*Math.sqrt(2*Math.PI)), c0=Math.floor(c);
+  const u=Math.max(0,(p.I-132)/18)+Math.max(0,(p.v-3.5)/1.5)+Math.max(0,(-p.e-1.6)/1.0);
+  for(let d=-span;d<=span;d++){
+    const i=c0+d, ii=((i%PN)+PN)%PN, dm=(i+0.5-c)*PCL, w=Math.exp(-dm*dm/(2*sg*sg));
+    const before=P.area[ii], revisit=now-P.tC[ii]>3;
+    P.area[ii]+=vol*w*norm;
+    const wt=w*dt; P.ws[ii]+=wt; P.eS[ii]+=wt*p.e; P.iS[ii]+=wt*p.I; P.vS[ii]+=wt*p.v;
+    if(w>0.6&&u>P.uMax[ii]) P.uMax[ii]=u;
+    if(Math.abs(dm)<0.3) P.tC[ii]=now;
+    if(w>0.2) P.hot[ii]=now;
+    if(p.cold&&before<0.8&&w>0.5) P.cold[ii]=1;
+    if(!p.cold&&revisit&&w>0.6&&p.I>=105) P.cold[ii]=0;
+  }
+}
+function pipeLegs(P,i){
+  const A=P.area[i], w=P.ws[i];
+  if(!(w>0)) return {A:0,wd:0,ht:0,e:0,I:120,v:0,conv:.3};
+  const e=P.eS[i]/w, I=P.iS[i]/w, v=P.vS[i]/w, At=A/1.15;
+  const sag=0.06+0.12*clamp((I-115)/35,0,1)+0.05*clamp((A-25)/20,0,1);
+  const r=clamp((1-sag)*(1-0.2*e),0.4,1.8), b=Math.sqrt(2*At/r);
+  return {A,wd:b,ht:r*b,e,I,v,conv:clamp(0.3+0.1*clamp(1.5-v,0,1.5),0.1,0.6)};
+}
+function pipeFlags(P,i,L){
+  if(L.A<0.8) return {uc:false,ol:false,lf:false};
+  const ol=Math.max(0,(108-L.I)/16)+Math.max(0,(L.A-58)/10)+Math.max(0,(L.e-1.8)/1)+Math.max(0,(0.7-L.v)/0.4);
+  const lf=Math.max(0,(102-L.I)/14)+Math.max(0,(L.v-3.8)/1.4)+(P.cold[i]?1.05:0)+Math.max(0,(Math.abs(L.e)-2.8)/1);
+  return {uc:P.uMax[i]>1,ol:ol>1,lf:lf>1};
+}
+function craterFilled(P,cr){const c=Math.round(cr.c); for(let d=-3;d<=3;d++){const i=((c+d)%PN+PN)%PN; if(P.tC[i]>cr.t+0.2) return true;} return false;}
+function pipeEval(P){
+  let weld=0,gap=0,inR=0,sum=0,sum2=0,uc=0,ol=0,lf=0,minL=99,maxL=0,wdS=0,htS=0,vS=0,eS=0,maxGap=0,run=0,first=-1;
+  const leaks=[];
+  for(let i=0;i<PN;i++){
+    const L=pipeLegs(P,i);
+    if(L.A<0.8){gap++; leaks.push(i); continue;}
+    weld++; const F=pipeFlags(P,i,L);
+    const ok=L.wd>=4.8&&L.wd<=9.6&&L.ht>=4.8&&L.ht<=9.6; if(ok) inR++;
+    const m=(L.wd+L.ht)/2; sum+=m; sum2+=m*m; wdS+=L.wd; htS+=L.ht; vS+=L.v; eS+=L.e;
+    minL=Math.min(minL,L.wd,L.ht); maxL=Math.max(maxL,L.wd,L.ht);
+    if(F.uc)uc++; if(F.ol)ol++; if(F.lf){lf++; leaks.push(i);}
+  }
+  // longest gap run (circular)
+  for(let k=0;k<2*PN;k++){const i=k%PN; if(P.area[i]<0.8){run++; if(run>maxGap) maxGap=Math.min(run,PN);} else run=0;}
+  const openCr=P.craters.filter(c=>!craterFilled(P,c));
+  openCr.forEach(c=>leaks.push(((Math.round(c.c))%PN+PN)%PN));
+  const n=Math.max(1,weld), mean=sum/n;
+  return {started:P.started,weld,gap,inR,out:weld-inR,gapMM:gap*PCL,maxGapMM:maxGap*PCL,mean,sd:Math.sqrt(Math.max(0,sum2/n-mean*mean)),
+    wd:wdS/n,ht:htS/n,v:vS/n,e:eS/n,uc:uc*PCL,ol:ol*PCL,lf:lf*PCL,craters:openCr.length,minL,maxL,leaks:[...new Set(leaks)],arcTime:P.arcTime};
+}
+return {K,RG,RN,RH,HOLE_R,PR,PN,PCL,createRepair,repairStep,repairEval,canStrikeR,riskR,supportedR,cellOf,createPipe,pipeDeposit,pipeLegs,pipeFlags,pipeEval,craterFilled,clamp};
+})();
+
+
+</script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id), clamp=M.clamp;
+const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+const DRAW={1:{hx:30,hy:60,pr:50,pt:35},2:{hx:40,hy:50,pr:50,pt:40},3:{hx:50,hy:30,pr:60,pt:45},4:{hx:40,hy:25,pr:50,pt:36},
+            5:{hx:50,hy:50,pr:50,pt:35},6:{hx:60,hy:60,pr:50,pt:45},7:{hx:45,hy:45,pr:65,pt:35},8:{hx:50,hy:55,pr:55,pt:40}};
+const CIRC='①②③④⑤⑥⑦⑧';
+const ROD_LIFE=60, OD=M.PR, ID=21.1;
+const STAGES=['read','repair','pipe','leak'];
+
+const S={draw:1,mode:'exam',stage:'repair',I:115,guide:true,sound:false,
+  ptr:null,touch:false,holding:false,arc:false,blockStrike:false,now:0,strikeT:0,vEma:0,eEma:0,dirEma:0,prevTh:null,prevTip:null,
+  tip:null,sparks:[],demo:null,auto:null,quiet:false,selDeg:90,follow:true,leakAnim:null,W:null,msgT:0};
+
+function newWork(){return {repair:M.createRepair(),pipe:M.createPipe(),rodsUsed:1,rod:1,read:{taps:[],err:null},leak:null,submitted:false,t0:null,ghost:null};}
+const rodsTotal=()=>S.mode==='exam'?3:Infinity;
+
+// ---------- canvases ----------
+const sim=$('sim'), sctx=sim.getContext('2d'), chart=$('chart'), cctx=chart.getContext('2d'), sec=$('section'), xctx=sec.getContext('2d');
+const rc=document.createElement('canvas'); rc.width=rc.height=M.RN; const rctx=rc.getContext('2d'); const rimg=rctx.createImageData(M.RN,M.RN);
+let G={W:600,H:480,dpr:1}, bg=null;
+function fit(c,ctx){const r=c.getBoundingClientRect(),d=Math.min(2,window.devicePixelRatio||1);c.width=Math.max(1,Math.round(r.width*d));c.height=Math.max(1,Math.round(r.height*d));ctx.setTransform(d,0,0,d,0,0);return{w:r.width,h:r.height,d};}
+function resize(){
+  const s=fit(sim,sctx); G={W:s.w,H:s.h,dpr:s.d,cx:s.w/2,cy:s.h/2};
+  G.rp=Math.min(s.w,s.h)/(2*17.2);           // repair view px/mm
+  G.pp=Math.min(s.w,s.h-20)/(2*(OD+13));     // pipe view px/mm
+  buildBg(); fit(chart,cctx); fit(sec,xctx); drawPanels();
+}
+function rng(seed){let s=seed;return()=>((s=(s*16807)%2147483647)/2147483647);}
+function buildBg(){
+  const {W,H,dpr}=G; bg=document.createElement('canvas'); bg.width=Math.round(W*dpr); bg.height=Math.round(H*dpr);
+  const b=bg.getContext('2d'); b.setTransform(dpr,0,0,dpr,0,0);
+  const gr=b.createLinearGradient(0,0,W,H); gr.addColorStop(0,'#55636b'); gr.addColorStop(1,'#3d484e');
+  b.fillStyle=gr; b.fillRect(0,0,W,H);
+  const r=rng(5);
+  for(let k=0;k<420;k++){b.fillStyle=`rgba(${r()<.5?'255,255,255':'0,0,0'},${0.02+r()*0.04})`; const x=r()*W,y=r()*H; b.fillRect(x,y,30+r()*140,1);}
+}
+// mm <-> px for weld views
+function view(){return S.stage==='repair'?{p:G.rp,ox:0,oy:0}:{p:G.pp,ox:0,oy:0};}
+const toPx=(x,y,v)=>[G.cx+x*v.p,G.cy-y*v.p];
+const toMM=(px,py,v)=>[(px-G.cx)/v.p,(G.cy-py)/v.p];
+
+// ---------- messages ----------
+function msg(t,tone='',sec=4.5){const m=$('msg'); if(!t){m.hidden=true;return;} m.textContent=t; m.dataset.tone=tone; m.hidden=false; S.msgT=sec;}
+let lastNag=0; function nag(t,tone='bad'){if(S.now-lastNag>1.2){msg(t,tone);lastNag=S.now;}}
+
+// ---------- stage switching ----------
+function setStage(st){
+  if(S.arc) stopArc('release');
+  S.stage=st; S.holding=false; S.blockStrike=false; S.prevTh=null;
+  document.querySelectorAll('.steps button').forEach(b=>b.setAttribute('aria-current',b.dataset.stage===st?'step':'false'));
+  $('hud').hidden=(st==='read'||st==='leak');
+  $('inspect').hidden=(st==='read'||st==='leak');
+  const hints={read:'도면에 적힌 치수로 판 위에 <b>구멍(바깥쪽)</b> 중심과 <b>파이프 중심</b>을 차례로 눌러 표시하세요. 기준선이 왼쪽·아래인지, 오른쪽·위인지 잘 보세요.',
+    repair:'파이프 안쪽 Ø12 구멍을 위에서 메워요. <b>가장자리 모재에서 아크를 켜고</b> 둘레를 돌며 안으로 좁혀 들어가세요. 뜨거워지면 손을 떼고 식히기.',
+    pipe:'점선(루트)을 따라 파이프 둘레를 한 바퀴 돌아요. 손을 떼면 끊기고, 다시 누르면 이어서. <b>시작점을 10mm 이상 덮고</b> 끝내세요.',
+    leak:'10분 냉각 뒤 파이프에 물을 붓고 3분 지켜봅니다. <b>작품 제출</b>을 누르면 시험해요. 제출하면 다시 작업할 수 없어요.'};
+  $('stageHint').innerHTML=hints[st];
+  $('ampHint').hidden=(st==='read'||st==='leak');
+  if(st==='leak'&&!S.W.leak) msg('작품 제출 · 누수 시험을 누르면 물을 붓습니다.','water',6);
+  else if(st!=='leak') msg('');
+  panelsMeta(); drawPanels(); report();
+}
+document.querySelectorAll('.steps button').forEach(b=>b.addEventListener('click',()=>setStage(b.dataset.stage)));
+
+// ---------- arc control ----------
+function rodsLeft(){return rodsTotal()-S.W.rodsUsed;}
+function tryChangeRod(){
+  if(S.W.rod>0.02) return true;
+  if(rodsLeft()>0){S.W.rodsUsed++; S.W.rod=1; if(!S.quiet) msg('새 용접봉으로 바꿨어요.'); return true;}
+  if(!S.quiet) msg('지급된 용접봉 3개를 모두 썼어요. 작품을 제출하세요.','bad'); return false;
+}
+function strike(){
+  S.arc=true; S.strikeT=S.now; S.vEma=0; S.prevTh=null; S.prevTip=S.tip?S.tip.slice():null;
+  if(S.mode==='exam'&&!S.W.t0) S.W.t0=performance.now();
+  if(S.stage==='pipe'){const [x,y]=S.tip; S.W.ghost={th0:Math.atan2(y,x),t0:S.now,dir:0};}
+  if(!S.quiet&&S.demo!=='live') msg('');
+}
+function stopArc(why){
+  if(!S.arc) return;
+  S.arc=false;
+  if(S.stage==='pipe'&&S.tip&&!(Math.abs(S.vEma)<0.45&&S.now-S.strikeT>0.8)){const th=Math.atan2(S.tip[1],S.tip[0]); S.W.pipe.craters.push({c:((th/(2*Math.PI)*M.PN)%M.PN+M.PN)%M.PN,t:S.now});}
+  if(S.quiet) return;
+  if(why==='rod'){S.blockStrike=true; if(S.demo!=='live') msg(rodsLeft()>0?'용접봉을 다 썼어요. 다시 누르면 새 봉으로 바뀝니다. 크레이터 조금 앞에서 켜고 되돌아와 이어 가세요.':'지급된 용접봉을 모두 썼어요. 작품을 제출하세요.',rodsLeft()>0?'':'bad');}
+  if(why==='off') msg('용접선에서 너무 벗어나 아크가 끊겼어요. 점선(루트)을 따라가세요.','bad');
+  report();
+}
+function weldStep(dt){
+  const W=S.W;
+  if(S.holding&&!S.arc&&!S.blockStrike&&!W.submitted&&S.tip){
+    if(W.rod<=0.02){ if(!tryChangeRod()){S.blockStrike=true;} else {S.blockStrike=true;} }
+    else if(S.stage==='repair'){
+      if(M.canStrikeR(W.repair,S.tip[0],S.tip[1])) strike();
+      else if(Math.abs(S.tip[0])<M.RH&&Math.abs(S.tip[1])<M.RH) nag('구멍 위에는 받쳐 줄 모재가 없어 아크가 안 켜져요. 가장자리 모재 쪽에서 켜세요.');
+    } else if(S.stage==='pipe'){
+      const e=Math.hypot(S.tip[0],S.tip[1])-OD;
+      if(Math.abs(e)<3.5) strike(); else if(e>-ID+3) nag('파이프와 판이 만나는 모서리(점선) 가까이 봉을 가져가세요.','');
+    }
+  }
+  if(!S.arc) return;
+  W.rod-=(S.I/120)/ROD_LIFE*dt;
+  if(W.rod<=0){W.rod=0; stopArc('rod'); return;}
+  const [x,y]=S.tip;
+  if(S.stage==='repair'){
+    if(Math.abs(x)>M.RH-0.3||Math.abs(y)>M.RH-0.3){stopArc('release'); return;}
+    const pv=S.prevTip||S.tip, vi=Math.hypot(x-pv[0],y-pv[1])/dt; S.vEma+=(vi-S.vEma)*Math.min(1,dt/0.35); S.prevTip=[x,y];
+    const ev=M.repairStep(W.repair,dt,{on:true,x,y,I:S.I},S.now);
+    if(!S.quiet){
+      if(ev.fall>0) nag('쇳물이 구멍 아래로 떨어지고 있어요(용락). 받쳐 주는 쇳물 가장자리로 겨누세요.');
+      else if(ev.burn>0) nag('열이 쌓여 얇은 곳이 녹아 뚫렸어요(용락). 손을 떼고 식힌 뒤 이어 가세요.');
+      sparkle(dt);
+    }
+  } else if(S.stage==='pipe'){
+    const r=Math.hypot(x,y), th=Math.atan2(y,x), e=r-OD;
+    if(Math.abs(e)>5){stopArc('off'); return;}
+    let dth=0; if(S.prevTh!=null){dth=th-S.prevTh; if(dth>Math.PI) dth-=2*Math.PI; if(dth<-Math.PI) dth+=2*Math.PI;}
+    S.prevTh=th;
+    const vi=Math.abs(dth)*OD/dt; S.vEma+=(vi-S.vEma)*Math.min(1,dt/0.35); S.eEma+=(e-S.eEma)*Math.min(1,dt/0.2);
+    S.dirEma+=(Math.sign(dth)-S.dirEma)*Math.min(1,dt/0.5);
+    if(W.ghost&&!W.ghost.dir&&S.now-S.strikeT>0.5&&Math.abs(S.dirEma)>0.5){W.ghost.dir=Math.sign(S.dirEma); W.ghost.th0=th; W.ghost.t0=S.now;}
+    M.pipeDeposit(W.pipe,th,dt,{I:S.I,v:Math.abs(S.vEma),e,cold:S.now-S.strikeT<0.6},S.now);
+    if(!S.quiet) sparkle(dt);
+  }
+}
+function sparkle(dt){
+  if(reduce) return; const v=view(), [px,py]=toPx(S.tip[0],S.tip[1],v);
+  const n=Math.random()<0.6?1:3; for(let k=0;k<n;k++) S.sparks.push({x:px,y:py,vx:(Math.random()-.5)*260,vy:(Math.random()-.6)*260,life:.25+Math.random()*.35});
+}
+
+// ---------- autopilot (시범) ----------
+function repairPlan(){const v=2.2;return [{r:5.0,v},{pause:1.4},{r:3.8,v},{pause:1.4},{r:2.6,v},{pause:1.4},{r:1.4,v},{pause:1.2},{dwell:1.1},{pause:0.6}];}
+function startAuto(stage){
+  S.auto={stage,plan:stage==='repair'?repairPlan():null,idx:0,t:0,th:0,deg:0,pause:0};
+  if(stage==='pipe'){S.auto.th=0;}
+}
+function autopilot(dt){
+  const A=S.auto; if(!A) return;
+  if(A.stage==='repair'){
+    const seg=A.plan[A.idx]; if(!seg){finishDemo(); return;}
+    A.t+=dt;
+    if(seg.pause){S.holding=false; if(S.arc) stopArc('release'); const nx=A.plan[A.idx+1]; if(nx&&nx.r) S.tip=[nx.r*Math.cos(A.th),nx.r*Math.sin(A.th)]; else S.tip=[0,0]; if(A.t>=seg.pause){A.idx++;A.t=0;} return;}
+    if(seg.dwell){S.tip=[0,0]; S.holding=true; if(A.t>=seg.dwell){A.idx++;A.t=0;} return;}
+    A.th+=seg.v/seg.r*dt; S.tip=[seg.r*Math.cos(A.th),seg.r*Math.sin(A.th)]; S.holding=true;
+    if(A.t>=2*Math.PI*seg.r/seg.v){A.idx++;A.t=0;}
+  } else {
+    if(A.pause>0){A.pause-=dt; S.holding=false; if(A.pause<=0){S.blockStrike=false; tryChangeRod(); A.deg-=6/OD*180/Math.PI*1; }}
+    else {
+      if(!S.arc&&S.W.rod<=0.02){A.pause=1.2; if(!S.quiet) msg('시범: 봉을 갈고 크레이터 6mm 앞에서 켜서 되돌아와 겹칩니다.'); return;}
+      S.holding=true;
+      if(S.arc&&A.deg<372) A.deg+=1.75/OD*180/Math.PI*dt;
+      if(A.deg>=372){A.hold=(A.hold||0)+dt; A.deg=372; if(A.hold>0.7){S.holding=false; stopArc('release'); finishDemo(); return;}}
+    }
+    const th=A.deg*Math.PI/180, r=OD-0.45+0.15*Math.sin(S.now*3);
+    S.tip=[r*Math.cos(th),r*Math.sin(th)];
+  }
+}
+function finishDemo(){
+  S.holding=false; S.auto=null; S.demo='done';
+  report(); drawPanels();
+  if(!S.quiet) msg('시범 끝. 작업 화면을 누르면 새 작품으로 직접 시작해요.','ok',8);
+}
+function runDemo(stage,quiet){
+  if(!quiet){ S.W=newWork(); }
+  const prevStage=S.stage; S.stage=stage; S.demo='live'; S.blockStrike=false; S.arc=false; S.W.rod=1;
+  startAuto(stage);
+  if(quiet){S.quiet=true; let n=0; const dt=1/45; while(S.demo==='live'&&n<20000){step(dt); n++;} for(let k=0;k<200;k++) step(1/30); S.quiet=false; S.stage=prevStage;}
+  else msg(stage==='repair'?'시범: 가장자리 모재에서 시작해 둘레를 돌고, 한 바퀴마다 손을 떼 식히며 안쪽으로 좁혀 갑니다.':'시범: 루트에서 파이프 쪽으로 0.5mm 붙여, 가이드 속도로 한 바퀴 돌고 시작점을 덮어 끝냅니다.','',7);
+}
+
+// ---------- input ----------
+function ptrPos(e){const r=sim.getBoundingClientRect(); return [e.clientX-r.left,e.clientY-r.top];}
+function updTip(){
+  if(!S.ptr||S.demo==='live'||S.stage==='read'||S.stage==='leak') return;
+  const off=S.touch?42:0, v=view(); S.tip=toMM(S.ptr[0],S.ptr[1]-off,v);
+}
+sim.addEventListener('pointerdown',e=>{
+  e.preventDefault(); S.ptr=ptrPos(e); S.touch=e.pointerType==='touch';
+  if(S.stage==='read'){readTap(S.ptr); return;}
+  if(S.stage==='leak') return;
+  if(S.demo){S.W=newWork(); S.demo=null; S.auto=null; msg('새 작품을 시작했어요.','',3); report(); drawPanels();}
+  if(S.W.submitted){msg('제출한 작품은 다시 작업할 수 없어요. 새 작품을 누르세요.','bad'); return;}
+  try{sim.setPointerCapture(e.pointerId);}catch(_){}
+  S.holding=true; S.blockStrike=false; S.follow=true; updTip();
+  if(S.W.rod<=0.02){ if(!tryChangeRod()) S.blockStrike=true; }
+});
+sim.addEventListener('pointermove',e=>{if(S.demo==='live')return; S.ptr=ptrPos(e); S.touch=e.pointerType==='touch'; if(S.stage==='read') return; updTip();});
+const up=()=>{if(S.demo==='live')return; S.holding=false; S.blockStrike=false; if(S.arc) stopArc('release');};
+sim.addEventListener('pointerup',up); sim.addEventListener('pointercancel',up);
+sim.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&!S.holding&&S.demo!=='live'){S.ptr=null; if(S.stage!=='read') S.tip=null;}});
+
+$('draw').addEventListener('change',e=>{S.draw=+e.target.value; S.W.read={taps:[],err:null}; report();});
+$('mode').addEventListener('change',e=>{S.mode=e.target.value; S.W=newWork(); S.demo=null; msg(S.mode==='exam'?'시험처럼: 봉 3개, 첫 아크부터 40분을 잽니다.':'자유 연습: 봉이 무제한이에요.','',4); report(); drawPanels();});
+$('amp').addEventListener('input',e=>{S.I=+e.target.value; $('ampO').textContent=S.I+' A';});
+$('guide').addEventListener('change',e=>S.guide=e.target.checked);
+$('bNew').addEventListener('click',()=>{S.W=newWork(); S.demo=null; S.auto=null; S.arc=false; msg('새 작품을 시작했어요.','',3); report(); drawPanels();});
+$('bClear').addEventListener('click',()=>{
+  if(S.W.submitted){msg('제출한 작품이에요. 새 작품을 누르세요.','bad');return;}
+  if(S.demo){S.W=newWork(); S.demo=null;}
+  if(S.stage==='repair') S.W.repair=M.createRepair();
+  else if(S.stage==='pipe') S.W.pipe=M.createPipe();
+  else if(S.stage==='read') S.W.read={taps:[],err:null};
+  msg('이 단계만 처음부터 다시 해요. 쓴 용접봉은 돌아오지 않아요.','',4); report(); drawPanels();
+});
+$('bRod').addEventListener('click',()=>{
+  if(S.arc||S.W.submitted) return;
+  if(S.W.rod>0.97){msg('아직 새 봉이에요.');return;}
+  if(rodsLeft()<=0){msg('남은 용접봉이 없어요.','bad');return;}
+  S.W.rodsUsed++; S.W.rod=1; msg('새 용접봉으로 바꿨어요. 남은 봉 토막은 버려져요.');
+});
+$('bDemo').addEventListener('click',()=>{
+  const st=(S.stage==='pipe')?'pipe':'repair'; if(S.stage!==st) setStage(st);
+  runDemo(st,false); S.stage=st;
+});
+$('bSubmit').addEventListener('click',()=>{
+  if(S.demo){msg('시범 작품은 제출할 수 없어요. 직접 용접해 보세요.');return;}
+  if(S.W.submitted){setStage('leak'); return;}
+  const r=M.repairEval(S.W.repair), p=M.pipeEval(S.W.pipe);
+  if(!r.started&&!p.started){msg('아직 용접한 곳이 없어요.');return;}
+  if(S.arc) stopArc('release');
+  S.W.submitted=true; setStage('leak'); S.leakAnim={t:0}; S.W.leak=leakResult();
+  msg('10분 냉각 완료. 파이프에 물을 붓습니다…','water',5);
+});
+chart.addEventListener('pointerdown',e=>{
+  if(S.stage!=='pipe') return; const r=chart.getBoundingClientRect(); const x=(e.clientX-r.left-34)/(r.width-34-10)*360;
+  S.selDeg=clamp(x,0,359.9); S.follow=false; drawPanels();
+});
+
+// ---------- read stage ----------
+function readLayout(){
+  const {W,H}=G, s=Math.max(0.8,Math.min((W-96)/200,(H-120)/180)), ox=(W-200*s)/2;
+  return {s,ox,top1:34,top2:34+80*s+62};
+}
+function readTap([px,py]){
+  const L=readLayout(), R=S.W.read;
+  if(R.err){R.taps=[];R.err=null;}
+  const x=(px-L.ox)/L.s, y=(L.top2+80*L.s-py)/L.s;
+  if(x<-10||x>210||y<-10||y>90) return;
+  R.taps.push([x,y]);
+  if(R.taps.length===2){
+    const D=DRAW[S.draw], h=[D.hx,D.hy], p=[200-D.pr,80-D.pt];
+    R.err=[Math.hypot(R.taps[0][0]-h[0],R.taps[0][1]-h[1]),Math.hypot(R.taps[1][0]-p[0],R.taps[1][1]-p[1])];
+    const ok=R.err.every(e=>e<=5);
+    msg(ok?`좋아요. 구멍 오차 ${R.err[0].toFixed(1)}mm, 파이프 중심 오차 ${R.err[1].toFixed(1)}mm — 모두 ±5mm 안이에요.`:`±5mm를 넘었어요. 구멍 ${R.err[0].toFixed(1)}mm · 파이프 ${R.err[1].toFixed(1)}mm. 기준선을 다시 확인하세요.`,ok?'ok':'bad',8);
+    if(S.mode==='exam'&&!S.W.t0) S.W.t0=performance.now();
+  } else msg('이제 파이프 중심(보수 용접 구멍)을 눌러 표시하세요.','',6);
+  report();
+}
+function dimH(c,x1,x2,y,label,ext1,ext2){
+  c.beginPath(); c.moveTo(x1,ext1); c.lineTo(x1,y+4); c.moveTo(x2,ext2); c.lineTo(x2,y+4); c.moveTo(x1,y); c.lineTo(x2,y); c.stroke();
+  arrow(c,x1,y,1,0); arrow(c,x2,y,-1,0); c.textAlign='center'; c.fillText(label,(x1+x2)/2,y-4);
+}
+function dimV(c,x,y1,y2,label,ext1,ext2){
+  c.beginPath(); c.moveTo(ext1,y1); c.lineTo(x+4*Math.sign(x-ext1||1),y1); c.moveTo(ext2,y2); c.lineTo(x+4*Math.sign(x-ext2||1),y2); c.moveTo(x,y1); c.lineTo(x,y2); c.stroke();
+  arrow(c,x,y1,0,1); arrow(c,x,y2,0,-1); c.save(); c.translate(x-5,(y1+y2)/2); c.rotate(-Math.PI/2); c.textAlign='center'; c.fillText(label,0,0); c.restore();
+}
+function arrow(c,x,y,dx,dy){c.beginPath(); c.moveTo(x,y); c.lineTo(x+dx*7-dy*2.5,y+dy*7+dx*2.5); c.lineTo(x+dx*7+dy*2.5,y+dy*7-dx*2.5); c.closePath(); c.fill();}
+function drawRead(){
+  const c=sctx,{W,H}=G,L=readLayout(),s=L.s,ox=L.ox,D=DRAW[S.draw];
+  c.fillStyle='#0f1316'; c.fillRect(0,0,W,H);
+  // drawing
+  const y0=L.top1, X=x=>ox+x*s, Y=y=>y0+(80-y)*s;
+  c.fillStyle='#e6e9ea'; c.font='12px "IBM Plex Sans KR",sans-serif'; c.textAlign='left'; c.fillText(`도면 ${CIRC[S.draw-1]}  가공 및 용접 도면 (단위 mm)`,ox,y0-14);
+  c.fillStyle='#1c2226'; c.fillRect(X(0),Y(80),200*s,80*s); c.strokeStyle='#cfd6d9'; c.lineWidth=1.2; c.strokeRect(X(0)+.5,Y(80)+.5,200*s,80*s);
+  const pcx=200-D.pr, pcy=80-D.pt;
+  c.strokeStyle='#cfd6d9'; c.lineWidth=1;
+  [[D.hx,D.hy,6],[pcx,pcy,6],[pcx,pcy,ID],[pcx,pcy,OD]].forEach(([x,y,r])=>{c.beginPath(); c.arc(X(x),Y(y),r*s,0,6.283); c.stroke();});
+  c.setLineDash([8,3,2,3]); c.strokeStyle='rgba(207,214,217,.45)';
+  c.beginPath(); c.moveTo(X(D.hx),Y(D.hy)-12*s); c.lineTo(X(D.hx),Y(D.hy)+12*s); c.moveTo(X(D.hx)-12*s,Y(D.hy)); c.lineTo(X(D.hx)+12*s,Y(D.hy));
+  c.moveTo(X(pcx),Y(pcy)-30*s); c.lineTo(X(pcx),Y(pcy)+30*s); c.moveTo(X(pcx)-30*s,Y(pcy)); c.lineTo(X(pcx)+30*s,Y(pcy)); c.stroke(); c.setLineDash([]);
+  c.fillStyle=c.strokeStyle='#9fb0b8'; c.font='11px "IBM Plex Mono",monospace'; c.lineWidth=1;
+  dimH(c,X(0),X(D.hx),Y(0)+16,String(D.hx),Y(0)+2,Y(D.hy));
+  dimH(c,X(pcx),X(200),Y(0)+16,String(D.pr),Y(pcy),Y(0)+2);
+  dimH(c,X(0),X(200),Y(0)+34,'200',Y(0)+20,Y(0)+20);
+  dimV(c,X(0)-14,Y(D.hy),Y(0),String(D.hy),X(D.hx),X(0)-2);
+  dimV(c,X(200)+16,Y(80),Y(pcy),String(D.pt),X(200)+2,X(pcx));
+  dimV(c,X(200)+34,Y(80),Y(0),'80',X(200)+20,X(200)+20);
+  c.textAlign='left'; c.fillStyle='#cfd6d9'; c.fillText('2×Ø12',X(D.hx)+8*s,Y(D.hy)-8*s);
+  c.fillText('40A',X(pcx)+OD*s*0.72,Y(pcy)-OD*s*0.72);
+  // blank plate
+  const y2=L.top2, Y2=y=>y2+(80-y)*s;
+  c.fillStyle='#e6e9ea'; c.font='12px "IBM Plex Sans KR",sans-serif'; c.fillText('연강판 200 × 80 · 6t — 여기를 눌러 표시',ox,y2-12);
+  c.fillStyle='#4a575e'; c.fillRect(X(0),Y2(80),200*s,80*s);
+  c.strokeStyle='rgba(230,233,234,.10)'; c.beginPath();
+  for(let x=10;x<200;x+=10){c.moveTo(X(x)+.5,Y2(80)); c.lineTo(X(x)+.5,Y2(0));}
+  for(let y=10;y<80;y+=10){c.moveTo(X(0),Y2(y)+.5); c.lineTo(X(200),Y2(y)+.5);} c.stroke();
+  c.strokeStyle='rgba(230,233,234,.22)'; c.beginPath();
+  for(let x=50;x<200;x+=50){c.moveTo(X(x)+.5,Y2(80)); c.lineTo(X(x)+.5,Y2(0));} c.moveTo(X(0),Y2(40)+.5); c.lineTo(X(200),Y2(40)+.5); c.stroke();
+  c.strokeStyle='#cfd6d9'; c.strokeRect(X(0)+.5,Y2(80)+.5,200*s,80*s);
+  c.fillStyle='#94a1a8'; c.font='10px "IBM Plex Mono",monospace'; c.textAlign='center';
+  for(let x=0;x<=200;x+=50) c.fillText(String(x),X(x),Y2(0)+13);
+  c.textAlign='right'; for(let y=0;y<=80;y+=40) c.fillText(String(y),X(0)-4,Y2(y)+3);
+  const R=S.W.read;
+  R.taps.forEach((t,i)=>{const px=X(t[0]),py=Y2(t[1]); c.strokeStyle=i?'#4fb3e8':'#ff8b2b'; c.lineWidth=2; c.beginPath(); c.arc(px,py,(i?OD:6)*s,0,6.283); c.stroke();
+    c.beginPath(); c.moveTo(px-6,py); c.lineTo(px+6,py); c.moveTo(px,py-6); c.lineTo(px,py+6); c.stroke(); c.lineWidth=1;
+    c.fillStyle=c.strokeStyle; c.font='11px "IBM Plex Sans KR",sans-serif'; c.textAlign='left'; c.fillText(i?'파이프':'구멍',px+8,py-8);});
+  if(R.err){
+    [[D.hx,D.hy],[pcx,pcy]].forEach(([x,y],i)=>{const ok=R.err[i]<=5; c.strokeStyle=ok?'#5ccb8b':'#f0645a'; c.setLineDash([3,3]); c.beginPath(); c.arc(X(x),Y2(y),5*s,0,6.283); c.stroke(); c.setLineDash([]);
+      c.beginPath(); c.moveTo(X(x)-4,Y2(y)-4); c.lineTo(X(x)+4,Y2(y)+4); c.moveTo(X(x)+4,Y2(y)-4); c.lineTo(X(x)-4,Y2(y)+4); c.stroke();});
+    c.fillStyle='#94a1a8'; c.font='11px "IBM Plex Sans KR",sans-serif'; c.textAlign='left';
+    c.fillText('초록/빨강 × = 정답 위치, 점선 원 = ±5mm. 다시 누르면 새로 표시해요.',ox,Y2(0)+30);
+  } else {
+    c.fillStyle='#94a1a8'; c.font='12px "IBM Plex Sans KR",sans-serif'; c.textAlign='left';
+    c.fillText(R.taps.length?'다음: 파이프 중심(보수 구멍)':'먼저: 파이프 바깥에 남는 Ø12 구멍 중심',ox,Y2(0)+30);
+  }
+}
+
+// ---------- repair rendering ----------
+function updateRepairImage(){
+  const R=S.W.repair, N=M.RN, d=rimg.data, dep=R.dep, hole=R.hole, T=R.T, guide=S.guide&&S.stage==='repair';
+  const h=k=>(hole[k]?0:6)+dep[k];
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){
+    const k=j*N+i, o=((N-1-j)*N+i)*4, dk=dep[k];
+    const hl=i>0?h(k-1):h(k), hr=i<N-1?h(k+1):h(k), hd=j>0?h(k-N):h(k), hu=j<N-1?h(k+N):h(k);
+    let shade=clamp(1+(-(hr-hl)+(hu-hd))*0.22,0.45,1.45);
+    let r,g,b;
+    if(hole[k]&&dk<0.3){
+      if(guide&&!M.supportedR(R,i,j)){r=34;g=12;b=12;} else {r=10;g=12;b=14;} shade=1;
+    } else if(!hole[k]&&dk<0.15){
+      const n=0.9+0.2*R.noise[k]; r=86*n;g=98*n;b=106*n;
+    } else {
+      const rip=0.5+0.5*Math.sin(R.tC[k]*2*Math.PI*3.2);
+      r=126+rip*30; g=136+rip*30; b=144+rip*28;
+      if(hole[k]&&dk<5.7){const f=0.38+0.62*dk/6; r*=f;g*=f;b*=f;}
+    }
+    r*=shade; g*=shade; b*=shade;
+    const t=clamp((T[k]-0.12)/0.9,0,1);
+    if(t>0){r+=(255-r)*t; g+=(110+130*t-g)*t; b+=(30+150*t*t-b)*t;}
+    d[o]=r; d[o+1]=g; d[o+2]=b; d[o+3]=255;
+  }
+  rctx.putImageData(rimg,0,0);
+}
+function drawPipeRing(c,cx,cy,p,deep){
+  // inner wall shading + top face
+  let g=c.createRadialGradient(cx,cy,ID*p*0.75,cx,cy,ID*p);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,`rgba(0,0,0,${deep?0.55:0.4})`);
+  c.fillStyle=g; c.beginPath(); c.arc(cx,cy,ID*p,0,6.283); c.fill();
+  c.fillStyle='#8a979e'; c.beginPath(); c.arc(cx,cy,OD*p,0,6.283); c.moveTo(cx+ID*p,cy); c.arc(cx,cy,ID*p,0,6.283); c.fill('evenodd');
+  c.strokeStyle='rgba(255,255,255,.25)'; c.lineWidth=1; c.beginPath(); c.arc(cx,cy,ID*p,0,6.283); c.stroke();
+  c.strokeStyle='rgba(0,0,0,.45)'; c.beginPath(); c.arc(cx,cy,OD*p,0,6.283); c.stroke();
+}
+function drawInterior(c,cx,cy,p){
+  c.save(); c.beginPath(); c.arc(cx,cy,ID*p,0,6.283); c.clip();
+  c.fillStyle='#58646c'; c.fillRect(cx-ID*p,cy-ID*p,2*ID*p,2*ID*p);
+  const half=M.RH*p; c.imageSmoothingEnabled=true; c.drawImage(rc,cx-half,cy-half,2*half,2*half);
+  c.restore();
+}
+function drawRod(c){
+  if(!S.tip) return;
+  const v=view(), [tx,ty]=toPx(S.tip[0],S.tip[1],v);
+  const L=24+90*clamp(S.W.rod,0,1), ux=0.42, uy=-0.91;
+  if(S.arc){
+    c.fillStyle='rgba(4,20,10,.45)'; c.fillRect(0,0,G.W,G.H);
+    const fl=reduce?1:0.85+Math.random()*0.3;
+    c.save(); c.globalCompositeOperation='lighter';
+    let g=c.createRadialGradient(tx,ty,0,tx,ty,80*fl); g.addColorStop(0,'rgba(255,240,210,.85)'); g.addColorStop(.3,'rgba(255,150,60,.35)'); g.addColorStop(1,'rgba(255,120,30,0)');
+    c.fillStyle=g; c.fillRect(tx-90,ty-90,180,180);
+    g=c.createRadialGradient(tx,ty,0,tx,ty,12); g.addColorStop(0,'rgba(235,248,255,1)'); g.addColorStop(1,'rgba(190,226,255,0)');
+    c.fillStyle=g; c.fillRect(tx-14,ty-14,28,28); c.restore();
+  }
+  c.strokeStyle='rgba(0,0,0,.35)'; c.lineWidth=6; c.beginPath(); c.moveTo(tx+10,ty+6); c.lineTo(tx+10+ux*L,ty+6+uy*L); c.stroke();
+  c.strokeStyle='#c8b386'; c.lineWidth=5; c.beginPath(); c.moveTo(tx,ty); c.lineTo(tx+ux*L,ty+uy*L); c.stroke();
+  c.save(); c.translate(tx+ux*L,ty+uy*L); c.rotate(Math.atan2(uy,ux)+Math.PI/2); c.fillStyle='#1d2327'; c.fillRect(-9,-44,18,44); c.fillStyle='#e0603c'; c.fillRect(-9,-44,18,6); c.restore();
+  c.fillStyle=S.arc?'#fff1d6':'#5a4632'; c.beginPath(); c.arc(tx,ty,2.4,0,6.283); c.fill();
+  if(S.touch&&S.ptr&&S.holding){c.strokeStyle='rgba(191,226,255,.35)'; c.setLineDash([2,3]); c.beginPath(); c.moveTo(tx,ty); c.lineTo(S.ptr[0],S.ptr[1]); c.stroke(); c.setLineDash([]);}
+}
+function drawSparks(c){
+  c.strokeStyle='#ffb35a'; c.lineWidth=1.2;
+  for(const p of S.sparks){c.globalAlpha=clamp(p.life*2.5,0,1); c.beginPath(); c.moveTo(p.x,p.y); c.lineTo(p.x-p.vx*0.02,p.y-p.vy*0.02); c.stroke();}
+  c.globalAlpha=1;
+}
+function drawRepair(){
+  const c=sctx,{W,H,cx,cy}=G,p=G.rp;
+  c.drawImage(bg,0,0,W,H);
+  c.fillStyle='rgba(0,0,0,.25)'; c.fillRect(0,0,W,H);
+  drawInterior(c,cx,cy,p); drawPipeRing(c,cx,cy,p,true);
+  if(S.guide){c.strokeStyle='rgba(191,226,255,.35)'; c.setLineDash([4,4]); c.beginPath(); c.arc(cx,cy,6*p,0,6.283); c.stroke(); c.setLineDash([]);}
+  // scale bar
+  c.fillStyle='rgba(230,233,234,.7)'; c.fillRect(12,H-18,10*p,2); c.font='10px "IBM Plex Mono",monospace'; c.textAlign='left'; c.fillText('10 mm',12,H-24);
+  drawRod(c); drawSparks(c);
+  const R=S.W.repair;
+  if(!R.started&&!S.holding&&S.demo!=='live'){
+    c.fillStyle='rgba(12,15,17,.7)'; c.fillRect(0,H-74,W,46);
+    c.fillStyle='#e6e9ea'; c.font='13px "IBM Plex Sans KR",sans-serif'; c.textAlign='center';
+    c.fillText('구멍 가장자리 모재(밝은 회색) 위를 누르면 아크가 켜져요',W/2,H-55);
+    c.fillStyle='#94a1a8'; c.font='12px "IBM Plex Sans KR",sans-serif';
+    c.fillText(S.guide?'어두운 빨강 = 지금 겨누면 쇳물이 떨어지는 곳':'둘레를 돌며 안쪽으로 좁혀 들어가기',W/2,H-37);
+  }
+  if(S.W.submitted) overlaySubmitted(c);
+}
+function overlaySubmitted(c){c.fillStyle='rgba(12,15,17,.5)'; c.fillRect(0,0,G.W,G.H); c.fillStyle='#e6e9ea'; c.font='16px "Black Han Sans",sans-serif'; c.textAlign='center'; c.fillText('제출 완료 · 새 작품을 눌러 다시 연습',G.W/2,40);}
+
+// ---------- pipe rendering ----------
+function drawBead(c,cx,cy,p){
+  const P=S.W.pipe, N=M.PN;
+  for(let i=0;i<N;i++){
+    if(P.area[i]<0.25) continue;
+    const L=M.pipeLegs(P,i), F=M.pipeFlags(P,i,L);
+    const a0=-(i)*2*Math.PI/N, a1=-(i+1.15)*2*Math.PI/N;
+    const ro=(OD+Math.max(0.6,L.wd*0.95))*p, ri=(OD-0.15)*p;
+    const rip=0.5+0.5*Math.sin(P.tC[i]*2*Math.PI*3.2), base=110+rip*32;
+    c.fillStyle=`rgb(${base},${base+10},${base+18})`;
+    c.beginPath(); c.arc(cx,cy,ro,a1,a0); c.arc(cx,cy,ri,a0,a1,true); c.closePath(); c.fill();
+    c.fillStyle=`rgba(255,255,255,${0.10+0.12*rip})`; const rm=(OD+L.wd*0.42)*p;
+    c.beginPath(); c.arc(cx,cy,rm+1.2,a1,a0); c.arc(cx,cy,rm-1.2,a0,a1,true); c.closePath(); c.fill();
+    const age=S.now-P.hot[i];
+    if(age<6){const T=Math.exp(-age/1.4); c.fillStyle=`rgba(255,${Math.round(120+120*T)},${Math.round(30+170*T*T)},${Math.min(1,T*1.1)})`; c.beginPath(); c.arc(cx,cy,ro,a1,a0); c.arc(cx,cy,ri,a0,a1,true); c.closePath(); c.fill();}
+    if(F.uc){c.strokeStyle='#06080a'; c.lineWidth=2; c.beginPath(); c.arc(cx,cy,(OD-0.3)*p,a1,a0); c.stroke();}
+    if(F.ol){c.strokeStyle='rgba(240,192,74,.75)'; c.lineWidth=2; c.beginPath(); c.arc(cx,cy,ro+1,a1,a0); c.stroke();}
+  }
+  for(const cr of P.craters){ if(M.craterFilled(P,cr)) continue; const i=Math.round(cr.c)%N, L=M.pipeLegs(P,i); if(L.A<0.8) continue; const a=-(cr.c)*2*Math.PI/N, r=(OD+L.wd*0.45)*p;
+    c.fillStyle='rgba(8,10,12,.85)'; c.beginPath(); c.arc(cx+Math.cos(a)*r,cy+Math.sin(a)*r,2.6,0,6.283); c.fill(); }
+}
+function drawPipe(){
+  const c=sctx,{W,H,cx,cy}=G,p=G.pp;
+  c.drawImage(bg,0,0,W,H);
+  c.fillStyle='rgba(0,0,0,.35)'; c.beginPath(); c.arc(cx+5,cy+6,OD*p+3,0,6.283); c.fill();
+  drawInterior(c,cx,cy,p); drawPipeRing(c,cx,cy,p,false);
+  drawBead(c,cx,cy,p);
+  if(S.guide){
+    c.strokeStyle='rgba(191,226,255,.45)'; c.setLineDash([4,5]); c.lineWidth=1; c.beginPath(); c.arc(cx,cy,(OD-0.4)*p,0,6.283); c.stroke(); c.setLineDash([]);
+    const g=S.W.ghost;
+    if(S.arc&&g&&g.dir){
+      const vt=M.K*S.I/(6.5*6.5/2*1.15), th=g.th0+g.dir*vt*(S.now-g.t0)/OD, r=(OD+11)*p;
+      const x=cx+Math.cos(th)*r, y=cy-Math.sin(th)*r;
+      c.fillStyle='#5ccb8b'; c.beginPath(); c.arc(x,y,5,0,6.283); c.fill();
+      c.strokeStyle='rgba(92,203,139,.5)'; c.beginPath(); c.moveTo(cx+Math.cos(th)*(OD+2)*p,cy-Math.sin(th)*(OD+2)*p); c.lineTo(x,y); c.stroke();
+    }
+  }
+  // angle ticks
+  c.fillStyle='rgba(230,233,234,.55)'; c.font='10px "IBM Plex Mono",monospace'; c.textAlign='center';
+  for(let d=0;d<360;d+=90){const a=d*Math.PI/180, r=(OD+15.5)*p; c.fillText(d+'°',cx+Math.cos(a)*r,cy-Math.sin(a)*r+3);}
+  drawRod(c); drawSparks(c);
+  const P=S.W.pipe;
+  if(!P.started&&!S.holding&&S.demo!=='live'){
+    c.fillStyle='rgba(12,15,17,.7)'; c.fillRect(0,H-58,W,40);
+    c.fillStyle='#e6e9ea'; c.font='13px "IBM Plex Sans KR",sans-serif'; c.textAlign='center';
+    c.fillText('점선(파이프와 판이 만나는 모서리)을 누른 채 둘레를 따라 돌아요',W/2,H-34);
+  }
+  if(S.W.submitted&&S.stage==='pipe') overlaySubmitted(c);
+}
+
+// ---------- leak stage ----------
+function leakResult(){
+  const r=M.repairEval(S.W.repair), p=M.pipeEval(S.W.pipe);
+  const pipeLeaks=p.started?p.leaks:[...Array(M.PN).keys()].filter(i=>i%12===0);
+  const repairLeak=!r.started||r.through>0;
+  return {pipeLeaks,repairLeak,leak:pipeLeaks.length>0||repairLeak};
+}
+function drawLeak(dt){
+  const c=sctx,{W,H,cx,cy}=G,p=G.pp;
+  c.drawImage(bg,0,0,W,H);
+  c.fillStyle='rgba(0,0,0,.35)'; c.beginPath(); c.arc(cx+5,cy+6,OD*p+3,0,6.283); c.fill();
+  drawInterior(c,cx,cy,p); drawPipeRing(c,cx,cy,p,false); drawBead(c,cx,cy,p);
+  const A=S.leakAnim, L=S.W.leak;
+  if(!A||!L){ c.fillStyle='rgba(12,15,17,.6)'; c.fillRect(0,H-58,W,40); c.fillStyle='#e6e9ea'; c.font='13px "IBM Plex Sans KR",sans-serif'; c.textAlign='center'; c.fillText('작품 제출 · 누수 시험을 누르면 물을 부어요',W/2,H-34); return; }
+  A.t+=dt;
+  const fill=clamp(A.t/1.6,0,1);
+  c.save(); c.beginPath(); c.arc(cx,cy,ID*p,0,6.283); c.clip();
+  c.fillStyle=`rgba(79,179,232,${0.18+0.32*fill})`; c.fillRect(cx-ID*p,cy-ID*p,2*ID*p,2*ID*p);
+  if(!reduce){c.strokeStyle='rgba(220,240,255,.25)'; for(let k=0;k<3;k++){const rr=((A.t*18+k*14)%(ID*p)); c.beginPath(); c.arc(cx,cy,rr,0,6.283); c.stroke();}}
+  c.restore();
+  const tl=clamp((A.t-1.8)/3,0,1);
+  if(tl>0){
+    c.fillStyle='rgba(79,179,232,.85)';
+    for(const i of L.pipeLeaks){const a=-(i+0.5)*2*Math.PI/M.PN, ln=(OD+3+tl*16)*p; const r0=OD*p;
+      const g=c.createLinearGradient(cx+Math.cos(a)*r0,cy+Math.sin(a)*r0,cx+Math.cos(a)*ln,cy+Math.sin(a)*ln);
+      g.addColorStop(0,'rgba(79,179,232,.9)'); g.addColorStop(1,'rgba(79,179,232,0)');
+      c.strokeStyle=g; c.lineWidth=3; c.beginPath(); c.moveTo(cx+Math.cos(a)*r0,cy+Math.sin(a)*r0); c.lineTo(cx+Math.cos(a)*ln,cy+Math.sin(a)*ln); c.stroke();
+      c.beginPath(); c.arc(cx+Math.cos(a)*ln,cy+Math.sin(a)*ln,2.5+tl*2,0,6.283); c.fill();}
+    if(L.repairLeak){c.strokeStyle='rgba(255,255,255,.8)'; c.setLineDash([3,3]); c.beginPath(); c.arc(cx,cy,7*p,0,6.283); c.stroke(); c.setLineDash([]);
+      c.fillStyle='#e6e9ea'; c.font='12px "IBM Plex Sans KR",sans-serif'; c.textAlign='center'; c.fillText('구멍 밑으로 물이 샘',cx,cy+9*p+12);}
+  }
+  const mins=Math.min(3,A.t/4.8*3);
+  c.fillStyle='rgba(12,15,17,.7)'; c.fillRect(0,H-30,W,30);
+  c.fillStyle='#e6e9ea'; c.font='13px "IBM Plex Mono",monospace'; c.textAlign='left';
+  c.fillText(`물 붓고 ${Math.floor(mins)}:${String(Math.floor(mins%1*60)).padStart(2,'0')} / 3:00`,12,H-10);
+  if(A.t>4.8&&!A.done){A.done=true; const pass=!L.leak;
+    msg(pass?'3분 동안 새는 곳이 없어요. 누수 시험 통과!':`누수 발견: ${L.pipeLeaks.length?`일주 용접 ${L.pipeLeaks.length}곳`:''}${L.pipeLeaks.length&&L.repairLeak?', ':''}${L.repairLeak?'보수 용접 구멍':''}. 파란 줄기가 새는 자리예요.`,pass?'ok':'bad',10);
+    saveHist(); report();}
+}
+
+// ---------- panels ----------
+function panelsMeta(){
+  const st=S.stage;
+  if(st==='repair'){$('leftTitle').textContent='단면 · 구멍 중심선'; $('rightTitle').textContent='뒷면 · 용락(처짐) 확인'; $('leftNote').textContent='점선 = 표면비드 6mm 한계'; $('rightNote').textContent='';
+    $('legend').innerHTML='<span><i style="background:#8c989f;height:8px"></i>용착 금속</span><span><i style="background:#56636b;height:8px"></i>모재 6t</span><span><i style="background:var(--molten)"></i>뜨거운 쇳물</span><span><i style="background:var(--bad)"></i>처진 쇳물</span>';}
+  else if(st==='pipe'){$('leftTitle').textContent='둘레 위치별 비드 폭·높이'; $('rightTitle').textContent='단면'; $('leftNote').textContent='그래프를 눌러 단면 보기';
+    $('legend').innerHTML='<span><i style="background:var(--molten)"></i>폭 (판 쪽)</span><span><i style="background:var(--arc)"></i>높이 (파이프 쪽)</span><span><i style="background:rgba(92,203,139,.5);height:8px"></i>4.8–9.6mm</span><span><i style="background:var(--bad)"></i>언더컷</span><span><i style="background:var(--warn)"></i>오버랩</span><span><i style="background:var(--water)"></i>누수 지점</span>';}
+}
+function drawPanels(){ if(S.stage==='repair'){drawRepairProfile(); drawBack();} else if(S.stage==='pipe'){drawPipeChart(); drawPipeSection();} }
+function drawRepairProfile(){
+  const c=cctx, r=chart.getBoundingClientRect(), W=r.width, H=r.height; if(!W) return;
+  const R=S.W.repair, N=M.RN; c.clearRect(0,0,W,H);
+  let j=N>>1; if(S.arc&&S.tip&&Math.abs(S.tip[1])<M.RH) j=M.cellOf(0,S.tip[1])[1];
+  $('rightNote').textContent='';
+  const s=Math.min((W-20)/(2*M.RH),(H-30)/16), ox=W/2, oy=H*0.55, X=x=>ox+x*s, Y=z=>oy-(z-3)*s;
+  // plate
+  c.fillStyle='#56636b'; c.fillRect(X(-M.RH),Y(6),2*M.RH*s,6*s); c.fillStyle='#0c0f11'; c.fillRect(X(-6),Y(6),12*s,6*s);
+  for(let i=0;i<N;i++){const k=j*N+i, x0=X(-M.RH+i*M.RG), w=M.RG*s+0.6, d=R.dep[k];
+    if(R.hole[k]){ if(d>0.02){c.fillStyle=R.T[k]>0.3?'#ff8b2b':'#8c989f'; c.fillRect(x0,Y(d),w,d*s);} }
+    else if(d>0.02){c.fillStyle=R.T[k]>0.3?'#ff8b2b':'#8c989f'; c.fillRect(x0,Y(6+d),w,d*s);}
+    if(R.back[k]>0.05){c.fillStyle='#f0645a'; const bh=Math.min(4,Math.sqrt(R.back[k])*1.2); c.beginPath(); c.ellipse(x0+w/2,Y(0)+bh*s/2,w*0.9,bh*s/2,0,0,6.283); c.fill();}
+  }
+  c.strokeStyle='rgba(240,100,90,.8)'; c.setLineDash([5,4]); c.beginPath(); c.moveTo(X(-M.RH),Y(12)+.5); c.lineTo(X(M.RH),Y(12)+.5); c.stroke(); c.setLineDash([]);
+  c.strokeStyle='rgba(230,233,234,.3)'; c.beginPath(); c.moveTo(X(-M.RH),Y(6)+.5); c.lineTo(X(M.RH),Y(6)+.5); c.stroke();
+  c.fillStyle='#94a1a8'; c.font='11px "IBM Plex Mono",monospace'; c.textAlign='left';
+  c.fillText('+6 mm',X(-M.RH)+4,Y(12)-4); c.fillText('표면',X(-M.RH)+4,Y(6)-4); c.fillText('뒷면',X(-M.RH)+4,Y(0)+14);
+  const e=M.repairEval(R); c.textAlign='right';
+  c.fillText(`메움 ${(e.fill*100).toFixed(0)}% · 최고 높이 ${e.maxH.toFixed(1)}mm`,W-6,14);
+}
+function drawBack(){
+  const c=xctx, r=sec.getBoundingClientRect(), W=r.width, H=r.height; if(!W) return;
+  const R=S.W.repair, N=M.RN; c.clearRect(0,0,W,H);
+  const s=Math.min(W,H-20)/(2*M.RH), ox=(W-2*M.RH*s)/2, oy=4;
+  c.fillStyle='#4a565d'; c.fillRect(ox,oy,2*M.RH*s,2*M.RH*s);
+  const cs=M.RG*s+0.5;
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const k=j*N+i; if(!R.hole[k]&&R.back[k]<=0.02) continue;
+    const x=ox+i*M.RG*s, y=oy+(N-1-j)*M.RG*s;   // 뒤집어 본 면: 좌우 반전 생략(단순화)
+    if(R.hole[k]){c.fillStyle=R.dep[k]>=1.2?'#6b777d':(R.dep[k]>0.1?'#2b3236':'#060708'); c.fillRect(x,y,cs,cs);}
+    if(R.back[k]>0.02){c.fillStyle=`rgba(240,100,90,${clamp(0.35+R.back[k]*0.25,0,1)})`; c.fillRect(x,y,cs,cs);}
+  }
+  c.strokeStyle='rgba(191,226,255,.35)'; c.setLineDash([3,3]); c.beginPath(); c.arc(ox+M.RH*s,oy+M.RH*s,6*s,0,6.283); c.stroke(); c.setLineDash([]);
+  const e=M.repairEval(R);
+  $('rightNote').textContent=e.sag>3?`처짐 ${e.sag.toFixed(0)}mm³ · 실격`:e.sag>0.2?`처짐 ${e.sag.toFixed(1)}mm³`:'처짐 없음';
+  c.fillStyle='#94a1a8'; c.font='11px "IBM Plex Sans KR",sans-serif'; c.textAlign='center';
+  c.fillText('검정 = 뚫림 · 빨강 = 밑으로 처진 쇳물',W/2,H-4);
+}
+function drawPipeChart(){
+  const c=cctx, r=chart.getBoundingClientRect(), W=r.width, H=r.height; if(!W) return;
+  const P=S.W.pipe, l=34, rr=10, t=10, b=34, X=d=>l+d/360*(W-l-rr), Y=v=>t+(1-v/12)*(H-t-b);
+  c.clearRect(0,0,W,H);
+  c.fillStyle='rgba(92,203,139,.10)'; c.fillRect(l,Y(9.6),W-l-rr,Y(4.8)-Y(9.6));
+  c.font='10px "IBM Plex Mono",monospace'; c.fillStyle='#94a1a8'; c.textAlign='right';
+  for(let v=0;v<=12;v+=2){c.strokeStyle='rgba(148,161,168,.15)'; c.beginPath(); c.moveTo(l,Y(v)+.5); c.lineTo(W-rr,Y(v)+.5); c.stroke(); c.fillText(v+'',l-6,Y(v)+3);}
+  c.strokeStyle='rgba(92,203,139,.6)'; [4.8,9.6].forEach(v=>{c.beginPath(); c.moveTo(l,Y(v)+.5); c.lineTo(W-rr,Y(v)+.5); c.stroke();});
+  c.textAlign='center'; for(let d=0;d<=360;d+=90) c.fillText(d+'°',X(d),H-b+14);
+  c.textAlign='left'; c.fillText('mm',2,t+4);
+  for(let i=0;i<M.PN;i++) if(P.area[i]<0.8){c.fillStyle='rgba(240,100,90,.12)'; c.fillRect(X(i),t,(W-l-rr)/M.PN+0.5,H-t-b);}
+  const path=(key,col)=>{c.strokeStyle=col; c.lineWidth=1.8; c.beginPath(); let on=false;
+    for(let i=0;i<M.PN;i++){const L=M.pipeLegs(P,i); if(L.A<0.8){on=false;continue;} const x=X(i+.5), y=Y(clamp(L[key],0,12)); if(!on){c.moveTo(x,y);on=true;} else c.lineTo(x,y);} c.stroke();};
+  path('wd','#ff8b2b'); path('ht','#bfe2ff');
+  const dy=H-b+20, ev=M.pipeEval(P), leaks=new Set(ev.leaks);
+  for(let i=0;i<M.PN;i++){const L=M.pipeLegs(P,i),F=M.pipeFlags(P,i,L), x=X(i), w=Math.max(1,(W-l-rr)/M.PN);
+    if(F.uc){c.fillStyle='#f0645a'; c.fillRect(x,dy,w+.5,4);} if(F.ol){c.fillStyle='#f0c04a'; c.fillRect(x,dy+5,w+.5,4);}
+    if(P.started&&leaks.has(i)){c.fillStyle='#4fb3e8'; c.fillRect(x,dy+10,w+.5,3);}}
+  const sd=S.follow&&S.arc&&S.tip?((Math.atan2(S.tip[1],S.tip[0])*180/Math.PI)+360)%360:S.selDeg;
+  c.strokeStyle='rgba(230,233,234,.6)'; c.setLineDash([3,3]); c.beginPath(); c.moveTo(X(sd)+.5,t); c.lineTo(X(sd)+.5,H-b); c.stroke(); c.setLineDash([]);
+  if(!P.started){c.fillStyle='#94a1a8'; c.font='13px "IBM Plex Sans KR",sans-serif'; c.textAlign='center'; c.fillText('용접하면 둘레 위치별 폭·높이가 그려져요',(l+W)/2,(t+H-b)/2);}
+}
+function drawPipeSection(){
+  const c=xctx, r=sec.getBoundingClientRect(), W=r.width, H=r.height; if(!W) return;
+  const P=S.W.pipe; c.clearRect(0,0,W,H);
+  const deg=S.follow&&S.arc&&S.tip?((Math.atan2(S.tip[1],S.tip[0])*180/Math.PI)+360)%360:S.selDeg;
+  const i=Math.floor(deg)%M.PN, L=M.pipeLegs(P,i), F=M.pipeFlags(P,i,L);
+  $('rightNote').textContent=deg.toFixed(0)+'° 지점';
+  const s=Math.min(W/19,H/19.5), ox=W*0.34, oy=H*0.7, Pt=(x,y)=>[ox+x*s,oy-y*s];
+  c.fillStyle='#4a565d'; let a=Pt(-4,0),b=Pt(14,-6); c.fillRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
+  c.fillStyle='#6d7a81'; a=Pt(-3.2,10.5); b=Pt(0,0); c.fillRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
+  c.font='11px "IBM Plex Sans KR",sans-serif'; c.fillStyle='#94a1a8'; c.textAlign='left';
+  c.fillText('파이프 3.2t',Pt(0.6,10)[0],Pt(0.6,10)[1]); c.fillText('판 6t',Pt(9,-3.6)[0],Pt(9,-3.6)[1]);
+  if(L.A<0.8){c.fillStyle='#f0645a'; c.font='14px "IBM Plex Sans KR",sans-serif'; c.textAlign='center'; c.fillText(P.started?'미용접 · 누수':'용접 전',Pt(4,4)[0],Pt(4,4)[1]); return;}
+  const wd=clamp(L.wd,0,13), ht=clamp(L.ht,0,11), bulge=L.conv*(wd+ht)*0.35;
+  const pen=clamp(0.5+(L.I-100)/45,0.15,1.6)*(F.lf?0.35:1);
+  c.fillStyle='rgba(255,139,43,.22)'; c.beginPath(); c.moveTo(...Pt(wd+0.3,0)); c.quadraticCurveTo(...Pt(wd*0.5,-pen),...Pt(-pen,-pen*0.6)); c.quadraticCurveTo(...Pt(-pen,ht*0.5),...Pt(0,ht+0.3)); c.lineTo(...Pt(0,0)); c.closePath(); c.fill();
+  c.fillStyle='#8c989f'; c.strokeStyle='#d3dadd'; c.lineWidth=1.4; c.beginPath(); c.moveTo(...Pt(0,0)); c.lineTo(...Pt(wd,0));
+  if(F.ol){c.lineTo(...Pt(wd+1.4,0.15)); c.lineTo(...Pt(wd+0.9,0.9));}
+  c.quadraticCurveTo(...Pt(wd/2+bulge,ht/2+bulge),...Pt(0,ht)); c.closePath(); c.fill(); c.stroke();
+  if(F.uc){c.fillStyle='#0b0e10'; c.beginPath(); c.moveTo(...Pt(0,ht+0.1)); c.lineTo(...Pt(-0.7,ht+0.5)); c.lineTo(...Pt(0,ht+1.2)); c.closePath(); c.fill();}
+  const ok=v=>v>=4.8&&v<=9.6; c.lineWidth=1; c.font='12px "IBM Plex Mono",monospace';
+  c.strokeStyle=c.fillStyle=ok(L.wd)?'#5ccb8b':'#f0645a';
+  a=Pt(0,-7.2); b=Pt(wd,-7.2); c.beginPath(); c.moveTo(a[0],a[1]); c.lineTo(b[0],b[1]); c.moveTo(a[0],a[1]-4); c.lineTo(a[0],a[1]+4); c.moveTo(b[0],b[1]-4); c.lineTo(b[0],b[1]+4); c.stroke();
+  c.textAlign='center'; c.fillText('폭 '+L.wd.toFixed(1),(a[0]+b[0])/2,a[1]+15);
+  c.strokeStyle=c.fillStyle=ok(L.ht)?'#5ccb8b':'#f0645a';
+  a=Pt(-5,0); b=Pt(-5,ht); c.beginPath(); c.moveTo(a[0],a[1]); c.lineTo(b[0],b[1]); c.moveTo(a[0]-4,a[1]); c.lineTo(a[0]+4,a[1]); c.moveTo(b[0]-4,b[1]); c.lineTo(b[0]+4,b[1]); c.stroke();
+  c.save(); c.translate(a[0]-8,(a[1]+b[1])/2); c.rotate(-Math.PI/2); c.fillText('높이 '+L.ht.toFixed(1),0,0); c.restore();
+  c.fillStyle='#94a1a8'; c.textAlign='right'; c.font='11px "IBM Plex Mono",monospace';
+  c.fillText(`${L.I.toFixed(0)}A · ${L.v.toFixed(1)}mm/s · 조준 ${L.e>=0?'+':''}${L.e.toFixed(1)}`,W-6,H-6);
+}
+
+// ---------- HUD ----------
+function setG(n,k,v,needle,zl,zw){$('k'+n).textContent=k; $('v'+n).innerHTML=v; $('n'+n).style.left=clamp(needle,0,1)*100+'%'; const z=$('z'+n); z.style.left=(zl||0)*100+'%'; z.style.width=(zw||0)*100+'%';}
+function hud(){
+  const W=S.W, tot=rodsTotal(), pct=clamp(W.rod,0,1);
+  const rodTxt=Math.round(pct*100)+'% <small>· 예비 '+(tot===Infinity?'∞':Math.max(0,tot-W.rodsUsed))+'</small>';
+  if(S.stage==='repair'){
+    const R=W.repair, e=M.repairEval(R), risk=S.tip?M.riskR(R,S.tip[0],S.tip[1]):0;
+    setG(0,'용락 위험 (열)',risk<0.05?'– <small>식음</small>':(risk*100).toFixed(0)+' <small>%</small>',risk/1.1,0,0.6/1.1);
+    $('n0').style.background=risk>0.85?'var(--bad)':risk>0.6?'var(--warn)':'var(--fg)';
+    setG(1,'구멍 메움',(e.fill*100).toFixed(0)+' <small>%</small>',e.fill,0.995,0.005);
+    setG(2,'표면비드 최고',e.maxH.toFixed(1)+' <small>mm · 한계 6</small>',e.maxH/8,0,6/8);
+    setG(3,'용접봉',rodTxt,pct);
+  } else if(S.stage==='pipe'){
+    const vmax=4, v=S.arc?Math.abs(S.vEma):0, lo=M.K*S.I/(9.0*9.0/2*1.15), hi=M.K*S.I/(5.2*5.2/2*1.15), vt=M.K*S.I/(6.5*6.5/2*1.15);
+    setG(0,'운봉 속도',(S.arc?v.toFixed(1):'–')+' <small>mm/s · 목표 '+vt.toFixed(1)+'</small>',v/vmax,lo/vmax,(hi-lo)/vmax);
+    const e=S.arc?S.eEma:(S.tip?Math.hypot(S.tip[0],S.tip[1])-OD:NaN);
+    setG(1,'조준 (+판 / −파이프)',isFinite(e)&&Math.abs(e)<9?(e>=0?'+':'')+e.toFixed(1)+' <small>mm</small>':'– <small>mm</small>',isFinite(e)?(e+4)/8:0.5,(4-1.2)/8,1.3/8);
+    let leg=NaN; if(S.arc){const vv=Math.max(0.4,v); leg=Math.sqrt(2*M.K*S.I/vv/1.15);}
+    setG(2,'지금 각장(예상)',(isFinite(leg)?(leg>12?'12+':leg.toFixed(1)):'–')+' <small>mm</small>',isFinite(leg)?leg/12:0,4.8/12,4.8/12);
+    setG(3,'용접봉',rodTxt,pct);
+  }
+}
+function clock(){
+  const el=$('clock');
+  if(S.mode!=='exam'){el.innerHTML='자유 연습 <b>시간 제한 없음</b>'; return;}
+  if(!S.W.t0||S.demo){el.innerHTML='시험시간 <b>40:00</b>'; return;}
+  const sec=(performance.now()-S.W.t0)/1000, left=40*60-sec, a=Math.abs(left);
+  el.innerHTML=`남은 시간 <b class="${left<0?'late':''}">${left<0?'-':''}${Math.floor(a/60)}:${String(Math.floor(a%60)).padStart(2,'0')}</b>`;
+}
+
+// ---------- report ----------
+function evaluate(){
+  const W=S.W, r=M.repairEval(W.repair), p=M.pipeEval(W.pipe), rd=W.read, lk=W.leak&&S.leakAnim&&S.leakAnim.done?W.leak:null;
+  const C=[]; const add=(grp,label,state,detail)=>C.push({grp,label,state,detail});
+  if(rd.err){add('도면','구멍 위치 ±5mm',rd.err[0]<=5?'ok':'bad',rd.err[0].toFixed(1)+' mm'); add('도면','파이프 위치 ±5mm',rd.err[1]<=5?'ok':'bad',rd.err[1].toFixed(1)+' mm');}
+  else add('도면','구멍·파이프 위치','wait','표시 전');
+  if(r.started){
+    add('보수 용접','구멍 상단 빈틈없이 메움',r.unfMM2<0.5?'ok':'bad',(r.fill*100).toFixed(0)+'%');
+    add('보수 용접','용락(처짐) 없음',r.sag<=3?'ok':'bad',r.sag.toFixed(1)+' mm³');
+    add('보수 용접','표면비드 높이 ≤ 6mm',r.maxH<=6?'ok':'bad',r.maxH.toFixed(1)+' mm');
+  } else add('보수 용접','구멍 메우기','wait','작업 전');
+  if(p.started){
+    add('일주 용접','10mm 이상 미용접 없음',p.maxGapMM<10?'ok':'bad',p.gapMM>0?`최장 ${p.maxGapMM.toFixed(0)}mm`:'0 mm');
+    add('일주 용접','폭·높이 4.8–9.6mm',p.out===0&&p.gap===0?'ok':'bad',`${p.minL<90?p.minL.toFixed(1):'–'}–${p.maxL.toFixed(1)} mm`);
+    add('일주 용접','언더컷·오버랩',(p.uc+p.ol)<5?'ok':'bad',`${p.uc.toFixed(0)} / ${p.ol.toFixed(0)} mm`);
+  } else add('일주 용접','파이프 온둘레','wait','작업 전');
+  if(lk) add('누수 시험','물 3분 · 새는 곳 없음',lk.leak?'bad':'ok',lk.leak?`${lk.pipeLeaks.length+(lk.repairLeak?1:0)}곳`:'통과');
+  else add('누수 시험','물 붓기','wait',p.started?`예상 누수 ${p.leaks.length+(r.started&&r.through>0?1:0)}곳`:'제출 후');
+  if(S.mode==='exam'&&W.t0&&!S.demo&&(performance.now()-W.t0)/1000>2400) add('시간','40분 안에 제출','bad','초과');
+  // score
+  let sc=0;
+  if(rd.err) sc+=10*clamp(1-(Math.max(...rd.err)-1)/6,0,1);
+  if(r.started) sc+=15*r.fill+(r.sag<=3?10*(1-r.sag/6):0)+(r.maxH<=6?10*clamp(1-(r.maxH-3.5)/5,0,1):0);
+  if(p.started) sc+=20*p.inR/M.PN+10*clamp(1-(p.sd-0.3)/1.2,0,1)*(p.weld/M.PN)+clamp(10-(p.uc+p.ol)*0.3-p.craters*2,0,10)*(p.weld/M.PN);
+  if(lk&&!lk.leak) sc+=15;
+  const bad=C.filter(x=>x.state==='bad'), wait=C.filter(x=>x.state==='wait');
+  return {C,score:Math.round(sc),bad,wait,r,p,lk};
+}
+function tipsFor(E){
+  const t=[], r=E.r, p=E.p, st=S.stage;
+  if(st==='read'||(!r.started&&!p.started)){
+    t.push('도면의 구멍 치수는 <b>왼쪽·아래</b>가 기준이고, 파이프 치수는 <b>오른쪽·위</b>가 기준이에요. 판에 옮길 땐 200−오른쪽, 80−위로 바꿔 계산하세요.');
+    t.push('파이프 중심 = 보수 용접할 구멍. 구멍 두 개를 Ø12로 뚫고, 그중 파이프 안쪽 구멍만 메웁니다.');
+  }
+  if(st==='repair'||st==='leak'){
+    if(r.sag>3) t.push(r.burns>20?'열이 쌓여 얇은 다리가 녹아 뚫렸어요. 전류를 5–10A 낮추고, 위험 게이지가 노랄 때 손을 떼 1–2초 식히세요.':'받침 없는 곳을 겨눠 쇳물이 떨어졌어요. 빨갛게 표시되는 곳은 피하고 이미 붙은 쇳물 가장자리를 겨누세요.');
+    if(r.started&&r.unfMM2>=0.5) t.push(`아직 ${r.unfMM2.toFixed(0)}mm² 덜 메워졌어요. 안쪽 링을 한 바퀴 더 돌거나 가운데를 짧게 채우세요.`);
+    if(r.maxH>6) t.push(`표면비드가 ${r.maxH.toFixed(1)}mm로 높아요. 이미 찬 곳을 계속 돌지 말고, 속도를 조금 높이세요.`);
+    if(r.started&&r.through>0) t.push('관통한 곳이 남아 있어 물이 새요. 검정으로 보이는 곳을 덮으세요.');
+  }
+  if(st==='pipe'||st==='leak'){
+    if(p.started){
+      if(p.maxGapMM>=10) t.push(`미용접 구간이 ${p.maxGapMM.toFixed(0)}mm 있어요. 10mm만 넘어도 실격이고 물이 새요. 이어 붙일 땐 크레이터 위로 되돌아와 겹치세요.`);
+      else if(p.gap>0) t.push('짧게 빈 곳이 있어요. 물이 새는 자리라 반드시 덮어야 해요.');
+      if(p.minL<4.8) t.push(`가는 곳(최소 ${p.minL.toFixed(1)}mm)이 있어요. 그 구간은 너무 빨랐어요. 초록 점보다 앞서가지 마세요.`);
+      if(p.maxL>9.6) t.push(`9.6mm를 넘은 곳이 있어요. 재시작이나 끝맺음에서 머문 자리예요.`);
+      if(p.wd-p.ht>0.8) t.push('폭이 높이보다 커요. 판 쪽으로 벌어졌어요. 파이프 쪽으로 조금 붙이세요.');
+      else if(p.ht-p.wd>0.8) t.push('높이가 폭보다 커요. 파이프 쪽에 너무 붙었어요(언더컷 위험).');
+      if(p.lf>0) t.push('차가운 시작점이나 낮은 전류 때문에 덜 녹은 곳이 있어요. 끝날 때 시작점을 덮어 다시 녹이세요.');
+      if(p.craters>0) t.push(`채우지 않은 크레이터 ${p.craters}개. 끊을 때 잠깐 멈추거나 다음 봉으로 덮으세요.`);
+    } else if(st==='pipe') t.push('점선을 따라 한 바퀴. 목표 속도는 1.5–2 mm/s 정도로 생각보다 느려요.');
+  }
+  if(!t.length) t.push('좋아요. 다른 도면 번호로 바꿔 처음부터 시험처럼 해 보세요.');
+  return t.slice(0,4);
+}
+function report(){
+  const E=evaluate(), box=$('report');
+  const st=['read','repair','pipe'];
+  // step badges
+  const grpState=g=>{const xs=E.C.filter(c=>c.grp===g); if(xs.some(x=>x.state==='bad')) return 'bad'; if(xs.every(x=>x.state==='ok')) return 'ok'; return 'wait';};
+  [['read','도면'],['repair','보수 용접'],['pipe','일주 용접'],['leak','누수 시험']].forEach(([id,g])=>{const s=grpState(g), el=$('s-'+id), d={read:'위치 표시',repair:'Ø12 구멍 메우기',pipe:'파이프 z6 필릿',leak:'물 붓고 3분'}[id];
+    el.className='s '+(s==='wait'?'':s); el.textContent=s==='ok'?'✓ 통과':s==='bad'?'✕ 실격 사유':d;});
+  $('repState').textContent=S.demo?'시범 작품':S.W.submitted?'제출됨':'진행 중 (실시간)';
+  const pass=E.bad.length===0&&E.wait.length===0;
+  let g='';
+  const rows=E.C.map(c=>{const head=c.grp!==g?`<div class="grp">${c.grp}</div>`:''; g=c.grp;
+    return head+`<div class="ck ${c.state}"><span class="m">${c.state==='ok'?'✓':c.state==='bad'?'✕':'·'}</span><span>${c.label}</span><span class="d">${c.detail}</span></div>`;}).join('');
+  box.innerHTML=`
+    <div style="display:grid;gap:10px;align-content:start">
+      <div class="score">${E.score}<small> / 100</small></div>
+      <span class="pill ${E.bad.length?'bad':pass?'ok':'wait'}">${E.bad.length?'이대로 제출하면 실격':pass?'실격 사유 없음':'남은 작업 '+E.wait.length+'개'}</span>
+      <div><h2 style="margin:6px 0">다음에 고칠 것</h2><ul class="tips">${tipsFor(E).map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    </div>
+    <div class="checks">${rows}</div>`;
+  return E;
+}
+
+// ---------- history ----------
+const HK='repair-leak-history';
+function loadHist(){try{return JSON.parse(localStorage.getItem(HK)||'[]');}catch(_){return [];}}
+function saveHist(){const E=evaluate(), h=loadHist(), d=new Date();
+  h.unshift({d:`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`,n:S.draw,m:S.mode,s:E.score,p:E.bad.length===0&&E.wait.length===0,leak:E.lk?E.lk.leak:null});
+  try{localStorage.setItem(HK,JSON.stringify(h.slice(0,12)));}catch(_){} renderHist();}
+function renderHist(){const h=loadHist(), el=$('hist');
+  el.innerHTML=h.length?h.map(x=>`<div><span>${x.d} · 도면 ${CIRC[x.n-1]} · ${x.m==='exam'?'시험처럼':'자유'}</span><span style="color:${x.p?'var(--ok)':'var(--bad)'}">${x.s}점 · ${x.leak===false?'누수 없음':'누수 있음'} · ${x.p?'통과':'실격'}</span></div>`).join(''):'<span>누수 시험까지 마친 작품이 여기에 쌓여요.</span>';}
+
+// ---------- sound ----------
+let actx=null,filt=null,gain=null;
+$('sound').addEventListener('change',e=>{
+  S.sound=e.target.checked;
+  try{
+    if(S.sound&&!actx){
+      actx=new (window.AudioContext||window.webkitAudioContext)();
+      const buf=actx.createBuffer(1,actx.sampleRate*2,actx.sampleRate), d=buf.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.35+(Math.random()<0.003?(Math.random()*2-1)*2.5:0);
+      const src=actx.createBufferSource(); src.buffer=buf; src.loop=true;
+      filt=actx.createBiquadFilter(); filt.type='bandpass'; filt.Q.value=0.6; filt.frequency.value=2500;
+      gain=actx.createGain(); gain.gain.value=0; src.connect(filt); filt.connect(gain); gain.connect(actx.destination); src.start();
+    }
+    if(actx&&actx.state==='suspended') actx.resume();
+  }catch(_){S.sound=false;e.target.checked=false;}
+});
+function sound(){ if(!gain) return; const on=S.sound&&S.arc; gain.gain.setTargetAtTime(on?0.12*(0.65+Math.random()*0.7):0,actx.currentTime,0.02); }
+
+// ---------- loop ----------
+function step(dt){
+  S.now+=dt;
+  if(S.demo==='live') autopilot(dt);
+  if(S.stage==='repair'||S.stage==='pipe') weldStep(dt);
+  if(!(S.arc&&S.stage==='repair')) M.repairStep(S.W.repair,dt,{on:false},S.now);
+  if(!S.quiet){for(const p of S.sparks){p.vy+=500*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;} S.sparks=S.sparks.filter(p=>p.life>0); if(S.sparks.length>180) S.sparks.splice(0,S.sparks.length-180);}
+}
+let last=performance.now(), frame=0;
+function loop(t){
+  const dt=clamp((t-last)/1000,0.001,0.05); last=t;
+  step(dt);
+  if(S.stage!=='read'&&(S.stage==='repair'||frame%20===0)) updateRepairImage();
+  if(S.stage==='read') drawRead(); else if(S.stage==='repair') drawRepair(); else if(S.stage==='pipe') drawPipe(); else drawLeak(dt);
+  sound();
+  if(frame%3===0) hud();
+  if(frame%30===0) clock();
+  if(frame%8===0&&(S.arc||S.demo==='live')){drawPanels(); if(frame%24===0) report();}
+  if(S.msgT>0){S.msgT-=dt; if(S.msgT<=0) msg('');}
+  frame++; requestAnimationFrame(loop);
+}
+const ro=new ResizeObserver(()=>resize()); ro.observe(sim); ro.observe(chart);
+S.W=newWork();
+resize();
+// 처음 화면: 시범으로 만든 예시 작품
+S.I=115; runDemo('repair',true); S.I=120; runDemo('pipe',true); S.I=115; S.demo='static'; S.tip=null;
+S.W.read={taps:[[30,60],[150,45]],err:[0,0]}; S.W.rodsUsed=1; S.W.rod=1;
+setStage('repair'); updateRepairImage(); renderHist(); hud(); clock();
+msg('예시 작품이에요 (시범으로 만든 보수 용접·일주 용접). 작업 화면을 누르면 새 작품으로 직접 시작합니다.','ok',12);
+requestAnimationFrame(loop);
+})();
+
+</script>
+
+</body>
+</html>
